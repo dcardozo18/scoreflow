@@ -2,7 +2,7 @@
 "use client";
 
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Trophy, 
   Users, 
@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateTournamentSummary } from '@/ai/flows/generate-tournament-summary-flow';
 import { TournamentFormat, SchedulingPreferences, Match } from '@/app/lib/types';
 import { generateLeagueMatches } from '@/app/lib/scheduler-utils';
+import { Badge } from '@/components/ui/badge';
 
 const DAYS = [
   { id: 0, label: 'Dom' },
@@ -49,6 +50,7 @@ export default function TournamentManagement() {
   const tournamentId = params.id as string;
   const initialTournament = mockTournaments.find(t => t.id === tournamentId);
   
+  const [isMounted, setIsMounted] = useState(false);
   const [tournament, setTournament] = useState(initialTournament);
   const [aiLoading, setAiLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -61,6 +63,10 @@ export default function TournamentManagement() {
       matchDurationMinutes: 90
     }
   );
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   if (!tournament) return <div>Torneo no encontrado.</div>;
 
@@ -199,7 +205,7 @@ export default function TournamentManagement() {
                         </div>
                         <div className="flex-1 text-left font-medium">{tournament.teams.find(t => t.id === match.awayTeamId)?.name}</div>
                         <div className="text-[10px] text-muted-foreground w-32 text-right">
-                          {match.date.toLocaleDateString()} {match.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {isMounted ? `${match.date.toLocaleDateString()} ${match.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '...'}
                         </div>
                         <Button variant="ghost" size="icon" className="text-destructive h-8 w-8"><Trash2 className="h-3 w-3" /></Button>
                       </CardContent>

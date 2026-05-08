@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trophy, MoreVertical, Plus, Edit, Trash, Search, ExternalLink, Settings2, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,9 +43,14 @@ import { mockTournaments } from '@/app/lib/mock-store';
 import Link from 'next/link';
 
 export default function ManageTournaments() {
+  const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const filtered = mockTournaments.filter(t => 
     t.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -161,7 +166,7 @@ export default function ManageTournaments() {
                          {t.name}
                        </div>
                        <span className="text-[10px] text-muted-foreground font-normal ml-6">
-                         {t.startDate.toLocaleDateString()}
+                         {isMounted ? t.startDate.toLocaleDateString() : '...'}
                        </span>
                     </div>
                   </TableCell>

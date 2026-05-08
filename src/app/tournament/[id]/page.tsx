@@ -3,6 +3,7 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { Trophy, Users, ArrowLeft, Info, LayoutGrid, List, Award, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { mockTournaments, calculateStandings } from '@/app/lib/mock-store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,6 +16,12 @@ import { Match } from '@/app/lib/types';
 export default function TournamentDetail() {
   const params = useParams();
   const id = params.id as string;
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const tournament = mockTournaments.find(t => t.id === id);
 
   if (!tournament) {
@@ -155,14 +162,14 @@ export default function TournamentDetail() {
                             <div className="flex-1 text-right font-semibold text-primary pr-4 truncate">{homeTeam?.name}</div>
                             <div className="flex flex-col items-center bg-secondary/30 rounded-lg px-6 py-2 min-w-[140px]">
                               <span className="text-xs text-muted-foreground mb-1 uppercase font-bold tracking-tighter">
-                                {match.status === 'Completed' ? 'Finalizado' : match.date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                {match.status === 'Completed' ? 'Finalizado' : isMounted ? match.date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : '...'}
                               </span>
                               <div className="text-2xl font-bold tracking-widest text-primary">
                                 {match.status === 'Completed' ? `${match.homeScore} - ${match.awayScore}` : 'VS'}
                               </div>
                               {match.status !== 'Completed' && (
                                 <span className="text-[10px] text-muted-foreground mt-1">
-                                  {match.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                  {isMounted ? match.date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '...'}
                                 </span>
                               )}
                             </div>

@@ -1,4 +1,7 @@
 
+"use client";
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Trophy, Calendar, Users, ArrowRight, ShieldCheck } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
@@ -7,6 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 export default function Home() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const activeTournaments = mockTournaments.filter(t => t.status === 'Active' || t.status === 'Upcoming');
   const completedTournaments = mockTournaments.filter(t => t.status === 'Completed');
 
@@ -67,7 +76,7 @@ export default function Home() {
                     </Badge>
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {tournament.startDate.toLocaleDateString()}
+                      {isMounted ? tournament.startDate.toLocaleDateString() : '...'}
                     </span>
                   </div>
                   <CardTitle className="text-xl">{tournament.name}</CardTitle>
