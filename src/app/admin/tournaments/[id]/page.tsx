@@ -12,7 +12,9 @@ import {
   Save, 
   Sparkles,
   Loader2,
-  Trash2
+  Trash2,
+  CheckCircle2,
+  Repeat
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -20,8 +22,11 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { generateTournamentSummary } from '@/ai/flows/generate-tournament-summary-flow';
+import { TournamentFormat } from '@/app/lib/types';
 
 export default function TournamentManagement() {
   const params = useParams();
@@ -44,16 +49,20 @@ export default function TournamentManagement() {
         matchHighlights: tournament.matches.map(m => ({ 
           matchDescription: `${tournament.teams.find(t => t.id === m.homeTeamId)?.name} vs ${tournament.teams.find(t => t.id === m.awayTeamId)?.name}: ${m.homeScore}-${m.awayScore}` 
         })),
-        winnerTeam: tournament.teams[0].name
+        winnerTeam: tournament.teams[0]?.name
       });
       
       setTournament({ ...tournament, aiSummary: result.summary });
-      toast({ title: "Summary Generated", description: "AI has successfully generated tournament highlights." });
+      toast({ title: "Resumen Generado", description: "La IA ha generado exitosamente los momentos destacados." });
     } catch (err) {
-      toast({ title: "Generation Failed", description: "Could not generate AI summary at this time.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo generar el resumen por IA.", variant: "destructive" });
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleFormatChange = (value: TournamentFormat) => {
+    setTournament(prev => prev ? { ...prev, format: value } : prev);
   };
 
   return (
@@ -61,26 +70,156 @@ export default function TournamentManagement() {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-headline font-bold text-primary">{tournament.name}</h1>
-          <p className="text-muted-foreground">Management Console</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">
+              {tournament.format}
+            </span>
+            <p className="text-muted-foreground text-sm">Consola de Administración</p>
+          </div>
         </div>
         <div className="flex gap-2">
-           <Button variant="outline">Preview Public</Button>
-           <Button><Save className="h-4 w-4 mr-2" /> Save Changes</Button>
+           <Button variant="outline">Previsualizar</Button>
+           <Button><Save className="h-4 w-4 mr-2" /> Guardar Cambios</Button>
         </div>
       </div>
 
-      <Tabs defaultValue="matches" className="space-y-6">
+      <Tabs defaultValue="settings" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Match Results</TabsTrigger>
-          <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Team Roster</TabsTrigger>
-          <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> AI Highlights</TabsTrigger>
-          <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Config</TabsTrigger>
+          <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configuración</TabsTrigger>
+          <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Resultados</TabsTrigger>
+          <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Equipos</TabsTrigger>
+          <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> Destacados IA</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="settings" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Parámetros del Torneo</CardTitle>
+                  <CardDescription>Define la estructura y reglas base de la competición.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>Tipo de Torneo</Label>
+                      <Select value={tournament.format} onValueChange={handleFormatChange}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona formato" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="League">Solo Liga (Todos contra todos)</SelectItem>
+                          <SelectItem value="Knockout">Eliminatoria Directa</SelectItem>
+                          <SelectItem value="Groups">Por Grupos</SelectItem>
+                          <SelectItem value="LeagueKnockout">Liga + Eliminatoria</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Cantidad de Equipos (Capacidad)</Label>
+                      <Input 
+                        type="number" 
+                        value={tournament.maxTeams} 
+                        onChange={(e) => setTournament(prev => prev ? {...prev, maxTeams: parseInt(e.target.value)} : prev)}
+                      />
+                    </div>
+
+                    {(tournament.format === 'Groups' || tournament.format === 'LeagueKnockout') && (
+                      <div className="space-y-2">
+                        <Label>Equipos que clasifican a sig. fase</Label>
+                        <Input 
+                          type="number" 
+                          value={tournament.qualifyingTeamsCount || 0}
+                          onChange={(e) => setTournament(prev => prev ? {...prev, qualifyingTeamsCount: parseInt(e.target.value)} : prev)}
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-secondary/20">
+                      <div className="space-y-0.5">
+                        <Label className="flex items-center gap-2 text-base">
+                          <Repeat className="h-4 w-4 text-accent" />
+                          Ida y Vuelta
+                        </Label>
+                        <p className="text-xs text-muted-foreground">¿Se juegan dos partidos por enfrentamiento?</p>
+                      </div>
+                      <Switch 
+                        checked={tournament.isHomeAndAway}
+                        onCheckedChange={(checked) => setTournament(prev => prev ? {...prev, isHomeAndAway: checked} : prev)}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información General</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Nombre del Torneo</Label>
+                    <Input value={tournament.name} onChange={(e) => setTournament(prev => prev ? {...prev, name: e.target.value} : prev)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Descripción</Label>
+                    <Input value={tournament.description} onChange={(e) => setTournament(prev => prev ? {...prev, description: e.target.value} : prev)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Fecha Inicio</Label>
+                      <Input type="date" value={tournament.startDate.toISOString().split('T')[0]} onChange={(e) => setTournament(prev => prev ? {...prev, startDate: new Date(e.target.value)} : prev)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Estado</Label>
+                      <Select value={tournament.status} onValueChange={(v: any) => setTournament(prev => prev ? {...prev, status: v} : prev)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Upcoming">Próximo</SelectItem>
+                          <SelectItem value="Active">Activo</SelectItem>
+                          <SelectItem value="Completed">Finalizado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+               <Card className="bg-primary/5 border-primary/20">
+                 <CardHeader>
+                   <CardTitle className="text-lg">Resumen de Registro</CardTitle>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Equipos Inscritos:</span>
+                      <span className="font-bold">{tournament.teams.length} / {tournament.maxTeams}</span>
+                    </div>
+                    <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-primary h-full transition-all" 
+                        style={{ width: `${(tournament.teams.length / tournament.maxTeams) * 100}%` }}
+                      />
+                    </div>
+                    <div className="pt-4 border-t space-y-2">
+                       <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
+                         <CheckCircle2 className="h-3 w-3" /> Formato validado
+                       </div>
+                    </div>
+                 </CardContent>
+               </Card>
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="matches" className="space-y-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold">Scheduled & Past Matches</h3>
-            <Button size="sm"><Plus className="h-4 w-4 mr-2" /> Add Match</Button>
+            <h3 className="text-xl font-bold">Calendario de Partidos</h3>
+            <Button size="sm"><Plus className="h-4 w-4 mr-2" /> Programar Partido</Button>
           </div>
           <div className="grid gap-4">
             {tournament.matches.map(match => (
@@ -88,13 +227,13 @@ export default function TournamentManagement() {
                 <CardContent className="p-4 flex items-center gap-4">
                   <div className="flex-1 text-right font-medium">{tournament.teams.find(t => t.id === match.homeTeamId)?.name}</div>
                   <div className="flex items-center gap-2">
-                    <Input className="w-12 text-center font-bold" defaultValue={match.homeScore} />
+                    <Input className="w-12 text-center font-bold h-8" defaultValue={match.homeScore} />
                     <span className="text-muted-foreground">-</span>
-                    <Input className="w-12 text-center font-bold" defaultValue={match.awayScore} />
+                    <Input className="w-12 text-center font-bold h-8" defaultValue={match.awayScore} />
                   </div>
                   <div className="flex-1 text-left font-medium">{tournament.teams.find(t => t.id === match.awayTeamId)?.name}</div>
                   <div className="text-xs text-muted-foreground w-32">{match.date.toLocaleDateString()}</div>
-                  <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="text-destructive h-8 w-8"><Trash2 className="h-4 w-4" /></Button>
                 </CardContent>
               </Card>
             ))}
@@ -103,8 +242,10 @@ export default function TournamentManagement() {
 
         <TabsContent value="teams" className="space-y-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold">Participating Teams</h3>
-            <Button size="sm"><Plus className="h-4 w-4 mr-2" /> Register Team</Button>
+            <h3 className="text-xl font-bold">Equipos Registrados</h3>
+            <Button size="sm" disabled={tournament.teams.length >= tournament.maxTeams}>
+              <Plus className="h-4 w-4 mr-2" /> Inscribir Equipo
+            </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {tournament.teams.map(team => (
@@ -116,10 +257,10 @@ export default function TournamentManagement() {
                     </div>
                     <div>
                       <h4 className="font-bold">{team.name}</h4>
-                      <p className="text-xs text-muted-foreground">{team.players.length} Players</p>
+                      <p className="text-xs text-muted-foreground">{team.players.length} Jugadores</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">Edit Squad</Button>
+                  <Button variant="outline" size="sm">Ficha Técnica</Button>
                 </CardContent>
               </Card>
             ))}
@@ -131,10 +272,10 @@ export default function TournamentManagement() {
              <CardHeader>
                <CardTitle className="flex items-center gap-2">
                  <Sparkles className="h-5 w-5 text-accent" />
-                 AI Tournament Summarization
+                 Generador de Crónicas Deportivas
                </CardTitle>
                <CardDescription>
-                 Use GenAI to create a compelling summary of the tournament based on results and standings.
+                 La IA analizará los resultados para crear una reseña emocionante de la competición.
                </CardDescription>
              </CardHeader>
              <CardContent>
@@ -144,60 +285,22 @@ export default function TournamentManagement() {
                        <p className="italic text-primary leading-relaxed">"{tournament.aiSummary}"</p>
                        <Button onClick={handleGenerateSummary} variant="outline" size="sm" disabled={aiLoading}>
                          {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                         Regenerate
+                         Regenerar Crónica
                        </Button>
                     </div>
                   ) : (
                     <>
                       <Sparkles className="h-12 w-12 text-accent opacity-20 mb-4" />
-                      <p className="text-muted-foreground mb-6">No summary generated yet. Complete the tournament first for best results.</p>
+                      <p className="text-muted-foreground mb-6">Aún no hay una crónica generada. Ideal para torneos finalizados o en curso avanzado.</p>
                       <Button onClick={handleGenerateSummary} disabled={aiLoading}>
                         {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                        Generate Highlights
+                        Generar Resumen
                       </Button>
                     </>
                   )}
                 </div>
              </CardContent>
            </Card>
-        </TabsContent>
-
-        <TabsContent value="settings" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Core Configuration</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tournament Name</Label>
-                  <Input defaultValue={tournament.name} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Format</Label>
-                  <Input defaultValue={tournament.format} readOnly />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input defaultValue={tournament.description} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" defaultValue={tournament.startDate.toISOString().split('T')[0]} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Input defaultValue={tournament.status} />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-end border-t pt-6">
-               <Button variant="ghost" className="mr-2">Reset</Button>
-               <Button>Apply Settings</Button>
-            </CardFooter>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>

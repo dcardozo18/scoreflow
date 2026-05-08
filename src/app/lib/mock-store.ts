@@ -16,6 +16,9 @@ export const mockTournaments: Tournament[] = [
     status: 'Active',
     startDate: new Date('2024-06-01'),
     endDate: new Date('2024-08-30'),
+    maxTeams: 12,
+    qualifyingTeamsCount: 4,
+    isHomeAndAway: true,
     teams: [
       { id: 'team1', name: 'Eagles FC', logo: 'https://picsum.photos/seed/team1/100/100', players: createMockPlayers('Eagles') },
       { id: 'team2', name: 'Lions United', logo: 'https://picsum.photos/seed/team2/100/100', players: createMockPlayers('Lions') },
@@ -37,6 +40,8 @@ export const mockTournaments: Tournament[] = [
     status: 'Completed',
     startDate: new Date('2023-11-01'),
     endDate: new Date('2023-12-20'),
+    maxTeams: 8,
+    isHomeAndAway: false,
     aiSummary: 'La Winter Cup 2023 concluyó con una emocionante victoria de Eagles FC. Demostraron superioridad táctica durante las fases eliminatorias, derrotando finalmente a Lions United 3-2 en una final dramática con un gol de último minuto.',
     teams: [
       { id: 'team1', name: 'Eagles FC', players: createMockPlayers('Eagles'), logo: 'https://picsum.photos/seed/team1/100/100' },
@@ -49,7 +54,7 @@ export const mockTournaments: Tournament[] = [
 ];
 
 export function calculateStandings(tournament: Tournament): StandingsEntry[] {
-  if (tournament.format !== 'League') return [];
+  if (tournament.format !== 'League' && tournament.format !== 'LeagueKnockout') return [];
 
   const standingsMap = new Map<string, StandingsEntry>();
 
@@ -70,6 +75,8 @@ export function calculateStandings(tournament: Tournament): StandingsEntry[] {
   tournament.matches.filter(m => m.status === 'Completed').forEach(match => {
     const home = standingsMap.get(match.homeTeamId)!;
     const away = standingsMap.get(match.awayTeamId)!;
+
+    if (!home || !away) return;
 
     home.played++;
     away.played++;

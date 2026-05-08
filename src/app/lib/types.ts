@@ -1,5 +1,5 @@
 
-export type TournamentFormat = 'League' | 'Knockout';
+export type TournamentFormat = 'League' | 'Knockout' | 'Groups' | 'LeagueKnockout';
 export type TournamentStatus = 'Upcoming' | 'Active' | 'Completed';
 
 export interface Player {
@@ -41,6 +41,10 @@ export interface Tournament {
   teams: Team[];
   matches: Match[];
   aiSummary?: string;
+  // Parametros avanzados
+  maxTeams: number;
+  qualifyingTeamsCount?: number;
+  isHomeAndAway: boolean;
 }
 
 export interface StandingsEntry {
