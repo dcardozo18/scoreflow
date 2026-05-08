@@ -10,6 +10,8 @@ import { Tournament, Team, Player, Match, TournamentFormat, TournamentStatus } f
 export const db = {
   // --- TOURNAMENTS ---
   async getTournaments(): Promise<Tournament[]> {
+    if (!supabase) return [];
+    
     const { data, error } = await supabase
       .from('tournaments')
       .select('*, teams(*, players(*)), matches(*)')
@@ -20,6 +22,8 @@ export const db = {
   },
 
   async getTournamentById(id: string): Promise<Tournament | null> {
+    if (!supabase) return null;
+
     const { data, error } = await supabase
       .from('tournaments')
       .select('*, teams(*, players(*)), matches(*)')
@@ -31,6 +35,8 @@ export const db = {
   },
 
   async createTournament(tournament: Partial<Tournament>) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { data, error } = await supabase
       .from('tournaments')
       .insert([this.mapTournamentToDB(tournament)])
@@ -42,6 +48,8 @@ export const db = {
   },
 
   async updateTournament(id: string, updates: Partial<Tournament>) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('tournaments')
       .update(this.mapTournamentToDB(updates))
@@ -51,6 +59,8 @@ export const db = {
   },
 
   async deleteTournament(id: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('tournaments')
       .delete()
@@ -61,6 +71,8 @@ export const db = {
 
   // --- TEAMS ---
   async createTeam(team: Partial<Team> & { tournamentId: string }) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { data, error } = await supabase
       .from('teams')
       .insert([{
@@ -76,6 +88,8 @@ export const db = {
   },
 
   async updateTeam(id: string, updates: Partial<Team>) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('teams')
       .update({
@@ -88,6 +102,8 @@ export const db = {
   },
 
   async deleteTeam(id: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('teams')
       .delete()
@@ -98,6 +114,8 @@ export const db = {
 
   // --- PLAYERS ---
   async upsertPlayers(players: Partial<Player>[], teamId: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const playersToInsert = players.map(p => ({
       id: (p.id && !p.id.startsWith('p-')) ? p.id : undefined,
       team_id: teamId,
@@ -117,6 +135,8 @@ export const db = {
   },
 
   async deletePlayer(id: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('players')
       .delete()
@@ -127,6 +147,8 @@ export const db = {
 
   // --- MATCHES ---
   async upsertMatches(matches: Partial<Match>[], tournamentId: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const matchesToInsert = matches.map(m => ({
       id: (m.id && !m.id.startsWith('m-')) ? m.id : undefined,
       tournament_id: tournamentId,
@@ -147,6 +169,8 @@ export const db = {
   },
 
   async updateMatch(id: string, updates: Partial<Match>) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('matches')
       .update({
@@ -162,6 +186,8 @@ export const db = {
   },
 
   async deleteMatch(id: string) {
+    if (!supabase) throw new Error('Supabase client not initialized');
+
     const { error } = await supabase
       .from('matches')
       .delete()

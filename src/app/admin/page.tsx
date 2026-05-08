@@ -6,6 +6,7 @@ import { Trophy, Users, Calendar, ArrowUpRight, Plus, Activity, Database, CheckC
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { db } from '@/lib/services/db';
+import { supabase } from '@/lib/supabase';
 import { Tournament } from '@/app/lib/types';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -17,6 +18,12 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function initDashboard() {
+      if (!supabase) {
+        setDbStatus('error');
+        setLoading(false);
+        return;
+      }
+
       try {
         const data = await db.getTournaments();
         setTournaments(data);
@@ -43,7 +50,7 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-4">
           <Badge variant={dbStatus === 'connected' ? 'default' : dbStatus === 'error' ? 'destructive' : 'outline'} className="h-8 gap-2">
             {dbStatus === 'connected' ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-            {dbStatus === 'connected' ? 'Supabase Online' : dbStatus === 'error' ? 'Error de Conexión' : 'Probando Conexión...'}
+            {dbStatus === 'connected' ? 'Supabase Online' : dbStatus === 'error' ? 'Error de Configuración' : 'Probando Conexión...'}
           </Badge>
           <Button className="flex items-center gap-2 shadow-lg" asChild>
             <Link href="/admin/tournaments"><Plus className="h-4 w-4" /> Nuevo Torneo</Link>
@@ -99,6 +106,12 @@ export default function AdminDashboard() {
           <CardContent className="space-y-4">
             {loading ? (
               <div className="flex justify-center p-8 opacity-20"><Activity className="animate-spin h-8 w-8" /></div>
+            ) : dbStatus === 'error' ? (
+              <div className="text-center py-8 text-destructive border-2 border-dashed border-destructive/20 rounded-lg bg-destructive/5">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-bold">Error de Configuración</p>
+                <p className="text-xs">Asegúrate de configurar las variables de entorno de Supabase en Netlify.</p>
+              </div>
             ) : activeTournaments.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                 No hay torneos activos. ¡Crea uno nuevo!
@@ -137,7 +150,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-sm font-medium">Conexión a Base de Datos</p>
                   <p className="text-xs text-muted-foreground">
-                    {dbStatus === 'connected' ? 'Persistencia activa en jivlxagnaslcifnsoxdi.supabase.co' : 'Error al conectar con el backend.'}
+                    {dbStatus === 'connected' ? 'Persistencia activa en Supabase Cloud' : 'Error: No se detectaron credenciales de Supabase.'}
                   </p>
                 </div>
               </div>
