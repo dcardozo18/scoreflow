@@ -1,0 +1,23 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "tournament-hero",
+      "description": "Football stadium with bright lights at night",
+      "imageUrl": "https://picsum.photos/seed/football1/1200/600",
+      "imageHint": "football stadium"
+    },
+    {
+      "id": "team-logo-1",
+      "description": "Abstract crest for a football team",
+      "imageUrl": "https://picsum.photos/seed/team1/200/200",
+      "imageHint": "team crest"
+    },
+    {
+      "id": "team-logo-2",
+      "description": "Abstract crest for another football team",
+      "imageUrl": "https://picsum.photos/seed/team2/200/200",
+      "imageHint": "sports logo"
+    }
+  ]
+}

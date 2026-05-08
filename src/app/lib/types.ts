@@ -1,0 +1,53 @@
+
+export type TournamentFormat = 'League' | 'Knockout';
+export type TournamentStatus = 'Upcoming' | 'Active' | 'Completed';
+
+export interface Player {
+  id: string;
+  name: string;
+  number?: number;
+  position?: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  logo?: string;
+  players: Player[];
+}
+
+export interface Match {
+  id: string;
+  tournamentId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeScore?: number;
+  awayScore?: number;
+  date: Date;
+  status: 'Scheduled' | 'Completed';
+}
+
+export interface Tournament {
+  id: string;
+  name: string;
+  description: string;
+  format: TournamentFormat;
+  status: TournamentStatus;
+  startDate: Date;
+  endDate: Date;
+  teams: Team[];
+  matches: Match[];
+  aiSummary?: string;
+}
+
+export interface StandingsEntry {
+  teamId: string;
+  teamName: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
+}
