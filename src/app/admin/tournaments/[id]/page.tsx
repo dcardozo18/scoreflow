@@ -21,7 +21,8 @@ import {
   ClipboardCheck,
   Edit2,
   AlertTriangle,
-  Clock
+  Clock,
+  FileDown
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -37,6 +38,7 @@ import { generateTournamentSummary } from '@/ai/flows/generate-tournament-summar
 import { TournamentFormat, SchedulingPreferences, Match, Team, Player } from '@/app/lib/types';
 import { generateLeagueMatches } from '@/app/lib/scheduler-utils';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -90,6 +92,8 @@ export default function TournamentManagement() {
   const [reschedulingMatch, setReschedulingMatch] = useState<Match | null>(null);
   const [matchScore, setMatchScore] = useState({ home: 0, away: 0 });
   const [itemToDelete, setItemToDelete] = useState<DeleteState>(null);
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [bulkText, setBulkText] = useState("");
   
   const [newMatchDate, setNewMatchDate] = useState('');
   const [newMatchTime, setNewMatchTime] = useState('');
@@ -179,6 +183,49 @@ export default function TournamentManagement() {
     setTournament({ ...tournament, teams: updatedTeams });
     const updatedTeam = updatedTeams.find(t => t.id === teamId);
     if (updatedTeam) setEditingTeam(updatedTeam);
+  };
+
+  const handleBulkAddPlayers = () => {
+    if (!editingTeam || !bulkText.trim()) return;
+
+    const lines = bulkText.split('\n');
+    const newPlayers: Player[] = [];
+
+    lines.forEach((line, index) => {
+      const parts = line.split(',');
+      const name = parts[0]?.trim();
+      if (!name) return;
+
+      const number = parseInt(parts[1]?.trim()) || 0;
+      const position = parts[2]?.trim() || "N/A";
+
+      newPlayers.push({
+        id: `p-bulk-${Date.now()}-${index}`,
+        name,
+        number,
+        position,
+        goals: 0,
+        yellowCards: 0,
+        redCards: 0
+      });
+    });
+
+    const updatedTeams = tournament.teams.map(team => 
+      team.id === editingTeam.id 
+        ? { ...team, players: [...team.players, ...newPlayers] } 
+        : team
+    );
+
+    setTournament({ ...tournament, teams: updatedTeams });
+    const updatedTeam = updatedTeams.find(t => t.id === editingTeam.id);
+    if (updatedTeam) setEditingTeam(updatedTeam);
+    
+    setBulkText("");
+    setShowBulkAdd(false);
+    toast({ 
+      title: "Carga Completada", 
+      description: `Se han añadido ${newPlayers.length} jugadores al equipo.` 
+    });
   };
 
   const handleAddTeam = () => {
@@ -601,9 +648,14 @@ export default function TournamentManagement() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <DialogTitle className="text-2xl text-primary font-bold">Configurar Equipo</DialogTitle>
-                <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
-                  <UserPlus className="h-4 w-4" /> Nuevo Jugador
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => setShowBulkAdd(true)} variant="outline" size="sm" className="gap-2">
+                    <FileDown className="h-4 w-4" /> Carga Masiva
+                  </Button>
+                  <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
+                    <UserPlus className="h-4 w-4" /> Nuevo Jugador
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase text-muted-foreground">Nombre del Equipo</Label>
@@ -700,6 +752,33 @@ export default function TournamentManagement() {
           </ScrollArea>
           <DialogFooter className="p-4 border-t bg-secondary/5">
              <Button className="w-full" onClick={() => setEditingTeam(null)}>Guardar y Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL: Carga Masiva de Jugadores --- */}
+      <Dialog open={showBulkAdd} onOpenChange={setShowBulkAdd}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Carga Masiva de Plantilla</DialogTitle>
+            <DialogDescription>
+              Pega la lista de jugadores, uno por línea. 
+              Formato opcional: <code className="bg-muted px-1 rounded text-xs">Nombre, Número, Posición</code>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea 
+              placeholder="Ejemplo:&#10;Lionel Messi, 10, DEL&#10;Luis Suarez, 9, DEL&#10;Gerard Pique, 3, DEF" 
+              className="min-h-[250px] font-mono text-sm"
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowBulkAdd(false)}>Cancelar</Button>
+            <Button onClick={handleBulkAddPlayers} disabled={!bulkText.trim()}>
+              Procesar y Agregar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
