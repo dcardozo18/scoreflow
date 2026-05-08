@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useParams } from 'next/navigation';
@@ -910,7 +909,7 @@ export default function TournamentManagement() {
           <DialogHeader>
             <DialogTitle>Carga Masiva de Plantilla</DialogTitle>
             <DialogDescription>
-              Pega la lista de jugadores, uno por línea. 
+              Pega la lista de jugadores, uno por línea. Formato: Nombre, Dorsal, Posición
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -1010,7 +1009,7 @@ export default function TournamentManagement() {
               <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción no se puede deshacer.
+              Esta acción no se puede deshacer y borrará permanentemente el elemento seleccionado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
