@@ -25,7 +25,8 @@ import {
   FileDown,
   BarChart3,
   Award,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid
 } from 'lucide-react';
 import { mockTournaments, calculateStandings } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -113,6 +114,11 @@ export default function TournamentManagement() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const standings = useMemo(() => {
+    if (!tournament) return [];
+    return calculateStandings(tournament);
+  }, [tournament]);
 
   const allPlayersWithStats = useMemo(() => {
     if (!tournament) return [];
@@ -340,6 +346,7 @@ export default function TournamentManagement() {
           <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configuración</TabsTrigger>
           <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Resultados</TabsTrigger>
           <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Equipos</TabsTrigger>
+          <TabsTrigger value="standings" className="gap-2"><LayoutGrid className="h-4 w-4" /> Tabla Posiciones</TabsTrigger>
           <TabsTrigger value="stats" className="gap-2"><BarChart3 className="h-4 w-4" /> Estadísticas</TabsTrigger>
           <TabsTrigger value="scheduler" className="gap-2"><CalendarIcon className="h-4 w-4" /> Programación Auto</TabsTrigger>
           <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> IA</TabsTrigger>
@@ -581,6 +588,45 @@ export default function TournamentManagement() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="standings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tabla de Clasificación</CardTitle>
+              <CardDescription>Resumen de posiciones basado en los puntos configurados ({tournament.pointsPerWin}/{tournament.pointsPerDraw}/{tournament.pointsPerLoss}).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">Pos</TableHead>
+                    <TableHead>Equipo</TableHead>
+                    <TableHead className="text-center">PJ</TableHead>
+                    <TableHead className="text-center">G</TableHead>
+                    <TableHead className="text-center">E</TableHead>
+                    <TableHead className="text-center">P</TableHead>
+                    <TableHead className="text-center">DG</TableHead>
+                    <TableHead className="text-center font-bold">Pts</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {standings.map((entry, idx) => (
+                    <TableRow key={entry.teamId}>
+                      <TableCell className="font-medium">{idx + 1}</TableCell>
+                      <TableCell className="font-bold text-primary">{entry.teamName}</TableCell>
+                      <TableCell className="text-center">{entry.played}</TableCell>
+                      <TableCell className="text-center text-green-600">{entry.won}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{entry.drawn}</TableCell>
+                      <TableCell className="text-center text-red-600">{entry.lost}</TableCell>
+                      <TableCell className="text-center">{entry.goalsFor - entry.goalsAgainst}</TableCell>
+                      <TableCell className="text-center font-bold text-accent">{entry.points}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="stats" className="space-y-6">
