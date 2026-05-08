@@ -550,21 +550,21 @@ export default function TournamentManagement() {
                       <div key={p.id} className="flex items-center gap-2 p-2 border rounded-lg bg-card text-xs">
                         <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
                         <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2 items-center">
+                          <div className="flex flex-col items-center">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-12 px-1 text-center" 
+                              value={p.goals} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
                           <Button 
                             variant="outline" 
                             size="icon" 
-                            className={`h-6 w-6 ${p.goals > 0 ? 'bg-primary/10 border-primary' : ''}`}
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.homeTeamId, p.id, 'goals', p.goals + 1)}
-                            title="Sumar Gol"
-                          >
-                            <Trophy className="h-3 w-3" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-6 w-6 border-yellow-400 bg-yellow-50"
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.homeTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
+                            className="h-8 w-8 border-yellow-400 bg-yellow-50 mt-4"
+                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
                             title="Amarilla"
                           >
                             <span className="text-[10px] font-bold">Y</span>
@@ -572,8 +572,8 @@ export default function TournamentManagement() {
                           <Button 
                             variant="outline" 
                             size="icon" 
-                            className="h-6 w-6 border-red-500 bg-red-50"
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.homeTeamId, p.id, 'redCards', p.redCards + 1)}
+                            className="h-8 w-8 border-red-500 bg-red-50 mt-4"
+                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'redCards', p.redCards + 1)}
                             title="Roja"
                           >
                             <span className="text-[10px] font-bold text-red-600">R</span>
@@ -594,21 +594,21 @@ export default function TournamentManagement() {
                       <div key={p.id} className="flex items-center gap-2 p-2 border rounded-lg bg-card text-xs">
                         <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
                         <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-1">
+                        <div className="flex gap-2 items-center">
+                          <div className="flex flex-col items-center">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-12 px-1 text-center" 
+                              value={p.goals} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
                           <Button 
                             variant="outline" 
                             size="icon" 
-                            className={`h-6 w-6 ${p.goals > 0 ? 'bg-primary/10 border-primary' : ''}`}
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.awayTeamId, p.id, 'goals', p.goals + 1)}
-                            title="Sumar Gol"
-                          >
-                            <Trophy className="h-3 w-3" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-6 w-6 border-yellow-400 bg-yellow-50"
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.awayTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
+                            className="h-8 w-8 border-yellow-400 bg-yellow-50 mt-4"
+                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
                             title="Amarilla"
                           >
                             <span className="text-[10px] font-bold">Y</span>
@@ -616,8 +616,8 @@ export default function TournamentManagement() {
                           <Button 
                             variant="outline" 
                             size="icon" 
-                            className="h-6 w-6 border-red-500 bg-red-50"
-                            onClick={() => handleUpdatePlayerStat(recordingMatch!.awayTeamId, p.id, 'redCards', p.redCards + 1)}
+                            className="h-8 w-8 border-red-500 bg-red-50 mt-4"
+                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'redCards', p.redCards + 1)}
                             title="Roja"
                           >
                             <span className="text-[10px] font-bold text-red-600">R</span>
