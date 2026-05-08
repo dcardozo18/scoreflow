@@ -202,6 +202,16 @@ export default function TournamentManagement() {
     }, 800);
   };
 
+  const handleDeleteMatch = (matchId: string) => {
+    if (!tournament) return;
+    const updatedMatches = tournament.matches.filter(m => m.id !== matchId);
+    setTournament({ ...tournament, matches: updatedMatches });
+    toast({
+      title: "Partido Eliminado",
+      description: "El partido ha sido removido del cronograma.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
@@ -354,7 +364,15 @@ export default function TournamentManagement() {
                         </div>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8"><Settings className="h-3 w-3" /></Button>
-                          <Button variant="ghost" size="icon" className="text-destructive h-8 w-8"><Trash2 className="h-3 w-3" /></Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-destructive h-8 w-8"
+                            onClick={() => handleDeleteMatch(match.id)}
+                            title="Eliminar partido"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
