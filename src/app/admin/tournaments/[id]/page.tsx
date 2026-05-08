@@ -14,7 +14,10 @@ import {
   Loader2,
   Trash2,
   CheckCircle2,
-  Repeat
+  Repeat,
+  Calendar as CalendarIcon,
+  Clock,
+  Wand2
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -24,9 +27,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { generateTournamentSummary } from '@/ai/flows/generate-tournament-summary-flow';
-import { TournamentFormat } from '@/app/lib/types';
+import { TournamentFormat, SchedulingPreferences } from '@/app/lib/types';
+import { generateLeagueMatches } from '@/app/lib/scheduler-utils';
+
+const DAYS = [
+  { id: 0, label: 'Dom' },
+  { id: 1, label: 'Lun' },
+  { id: 2, label: 'Mar' },
+  { id: 3, label: 'Mié' },
+  { id: 4, label: 'Jue' },
+  { id: 5, label: 'Vie' },
+  { id: 6, label: 'Sáb' },
+];
 
 export default function TournamentManagement() {
   const params = useParams();
@@ -36,6 +51,16 @@ export default function TournamentManagement() {
   
   const [tournament, setTournament] = useState(initialTournament);
   const [aiLoading, setAiLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const [schedPrefs, setSchedPrefs] = useState<SchedulingPreferences>(
+    tournament?.schedulingPreferences || {
+      allowedDays: [5, 6, 0], // Vie, Sáb, Dom por defecto
+      startTime: '08:00',
+      endTime: '20:00',
+      matchDurationMinutes: 90
+    }
+  );
 
   if (!tournament) return <div>Tournament not found.</div>;
 
@@ -61,6 +86,25 @@ export default function TournamentManagement() {
     }
   };
 
+  const handleAutoSchedule = () => {
+    setIsGenerating(true);
+    setTimeout(() => {
+      const newMatches = generateLeagueMatches(
+        tournament.id,
+        tournament.teams,
+        tournament.startDate,
+        tournament.isHomeAndAway,
+        schedPrefs
+      );
+      setTournament(prev => prev ? { ...prev, matches: newMatches } : prev);
+      setIsGenerating(false);
+      toast({
+        title: "Calendario Creado",
+        description: `Se han generado ${newMatches.length} partidos automáticamente.`,
+      });
+    }, 800);
+  };
+
   const handleFormatChange = (value: TournamentFormat) => {
     setTournament(prev => prev ? { ...prev, format: value } : prev);
   };
@@ -84,10 +128,11 @@ export default function TournamentManagement() {
       </div>
 
       <Tabs defaultValue="settings" className="space-y-6">
-        <TabsList>
+        <TabsList className="bg-white p-1 border">
           <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configuración</TabsTrigger>
           <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Resultados</TabsTrigger>
           <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Equipos</TabsTrigger>
+          <TabsTrigger value="scheduler" className="gap-2"><CalendarIcon className="h-4 w-4" /> Programación Auto</TabsTrigger>
           <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> Destacados IA</TabsTrigger>
         </TabsList>
 
@@ -222,21 +267,30 @@ export default function TournamentManagement() {
             <Button size="sm"><Plus className="h-4 w-4 mr-2" /> Programar Partido</Button>
           </div>
           <div className="grid gap-4">
-            {tournament.matches.map(match => (
-              <Card key={match.id}>
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="flex-1 text-right font-medium">{tournament.teams.find(t => t.id === match.homeTeamId)?.name}</div>
-                  <div className="flex items-center gap-2">
-                    <Input className="w-12 text-center font-bold h-8" defaultValue={match.homeScore} />
-                    <span className="text-muted-foreground">-</span>
-                    <Input className="w-12 text-center font-bold h-8" defaultValue={match.awayScore} />
-                  </div>
-                  <div className="flex-1 text-left font-medium">{tournament.teams.find(t => t.id === match.awayTeamId)?.name}</div>
-                  <div className="text-xs text-muted-foreground w-32">{match.date.toLocaleDateString()}</div>
-                  <Button variant="ghost" size="icon" className="text-destructive h-8 w-8"><Trash2 className="h-4 w-4" /></Button>
-                </CardContent>
-              </Card>
-            ))}
+            {tournament.matches.length === 0 ? (
+              <div className="text-center py-20 border-2 border-dashed rounded-xl">
+                 <CalendarIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+                 <p className="text-muted-foreground">No hay partidos programados. Usa la pestaña "Programación Auto" para generarlos.</p>
+              </div>
+            ) : (
+              tournament.matches.map(match => (
+                <Card key={match.id}>
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="flex-1 text-right font-medium">{tournament.teams.find(t => t.id === match.homeTeamId)?.name}</div>
+                    <div className="flex items-center gap-2">
+                      <Input className="w-12 text-center font-bold h-8" defaultValue={match.homeScore} />
+                      <span className="text-muted-foreground">-</span>
+                      <Input className="w-12 text-center font-bold h-8" defaultValue={match.awayScore} />
+                    </div>
+                    <div className="flex-1 text-left font-medium">{tournament.teams.find(t => t.id === match.awayTeamId)?.name}</div>
+                    <div className="text-xs text-muted-foreground w-40 text-right">
+                      {match.date.toLocaleDateString()} {match.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8"><Trash2 className="h-4 w-4" /></Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </TabsContent>
 
@@ -265,6 +319,89 @@ export default function TournamentManagement() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="scheduler" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-accent" />
+                Generador Automático de Calendario
+              </CardTitle>
+              <CardDescription>
+                Configura los días y horas permitidos. La IA distribuirá todos los partidos del torneo automáticamente.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <Label className="text-base">Días de Juego Permitidos</Label>
+                  <div className="grid grid-cols-4 gap-4">
+                    {DAYS.map((day) => (
+                      <div key={day.id} className="flex items-center space-x-2 border p-2 rounded-md hover:bg-secondary/50 transition-colors">
+                        <Checkbox 
+                          id={`day-${day.id}`} 
+                          checked={schedPrefs.allowedDays.includes(day.id)}
+                          onCheckedChange={(checked) => {
+                            setSchedPrefs(prev => ({
+                              ...prev,
+                              allowedDays: checked 
+                                ? [...prev.allowedDays, day.id]
+                                : prev.allowedDays.filter(d => d !== day.id)
+                            }));
+                          }}
+                        />
+                        <label htmlFor={`day-${day.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                          {day.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2"><Clock className="h-4 w-4" /> Hora Inicio</Label>
+                      <Input 
+                        type="time" 
+                        value={schedPrefs.startTime} 
+                        onChange={(e) => setSchedPrefs(prev => ({ ...prev, startTime: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2"><Clock className="h-4 w-4" /> Hora Fin Máx.</Label>
+                      <Input 
+                        type="time" 
+                        value={schedPrefs.endTime}
+                        onChange={(e) => setSchedPrefs(prev => ({ ...prev, endTime: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Duración de Partido (minutos)</Label>
+                    <Input 
+                      type="number" 
+                      value={schedPrefs.matchDurationMinutes}
+                      onChange={(e) => setSchedPrefs(prev => ({ ...prev, matchDurationMinutes: parseInt(e.target.value) }))}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Se añade automáticamente un descanso de 15 minutos entre partidos.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-accent/5 p-6 border border-accent/20 rounded-xl flex items-center justify-between">
+                 <div className="space-y-1">
+                    <p className="font-bold text-primary">Listo para programar</p>
+                    <p className="text-sm text-muted-foreground">Se generarán partidos para los {tournament.teams.length} equipos inscritos.</p>
+                 </div>
+                 <Button onClick={handleAutoSchedule} disabled={isGenerating || tournament.teams.length < 2}>
+                   {isGenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
+                   {tournament.matches.length > 0 ? 'Regenerar Calendario' : 'Generar Calendario Ahora'}
+                 </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="ai" className="space-y-6">

@@ -30,6 +30,13 @@ export interface Match {
   status: 'Scheduled' | 'Completed';
 }
 
+export interface SchedulingPreferences {
+  allowedDays: number[]; // 0 (Sun) to 6 (Sat)
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  matchDurationMinutes: number;
+}
+
 export interface Tournament {
   id: string;
   name: string;
@@ -41,10 +48,10 @@ export interface Tournament {
   teams: Team[];
   matches: Match[];
   aiSummary?: string;
-  // Parametros avanzados
   maxTeams: number;
   qualifyingTeamsCount?: number;
   isHomeAndAway: boolean;
+  schedulingPreferences?: SchedulingPreferences;
 }
 
 export interface StandingsEntry {
