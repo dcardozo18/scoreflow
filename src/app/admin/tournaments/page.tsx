@@ -2,20 +2,14 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/services/db';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
 import { 
   Table, 
   TableBody, 
@@ -55,6 +49,7 @@ import { TournamentFormat, Tournament } from '@/app/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ManageTournaments() {
+  const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,10 +93,15 @@ export default function ManageTournaments() {
 
   const handleCreate = async () => {
     try {
-      await db.createTournament(newTournament);
+      if (!newTournament.name) {
+        toast({ title: "Error", description: "El nombre es obligatorio.", variant: "destructive" });
+        return;
+      }
+      const created = await db.createTournament(newTournament);
       toast({ title: "Torneo Creado", description: "Persistido en Supabase." });
       setIsCreateOpen(false);
-      loadTournaments();
+      // Redirigir al usuario al nuevo torneo para que pueda gestionarlo inmediatamente
+      router.push(`/admin/tournaments/${created.id}`);
     } catch (error) {
       toast({ title: "Error", description: "Falló la creación.", variant: "destructive" });
     }
@@ -134,13 +134,17 @@ export default function ManageTournaments() {
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Crear Torneo Real</DialogTitle>
-              <DialogDescription>Configura los parámetros para la base de datos.</DialogDescription>
+              <DialogDescription>Configura los parámetros iniciales para la base de datos.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input value={newTournament.name} onChange={e => setNewTournament({...newTournament, name: e.target.value})} />
+                <div className="space-y-2 col-span-2">
+                  <Label>Nombre del Torneo</Label>
+                  <Input 
+                    placeholder="Ej. Copa Verano 2024" 
+                    value={newTournament.name} 
+                    onChange={e => setNewTournament({...newTournament, name: e.target.value})} 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Formato</Label>
@@ -149,14 +153,23 @@ export default function ManageTournaments() {
                     <SelectContent>
                       <SelectItem value="League">Liga</SelectItem>
                       <SelectItem value="Knockout">Eliminatoria</SelectItem>
-                      <SelectItem value="LeagueKnockout">Mixto</SelectItem>
+                      <SelectItem value="Groups">Grupos</SelectItem>
+                      <SelectItem value="LeagueKnockout">Liga + Eliminatoria (Mixto)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Máx. Equipos</Label>
+                  <Input 
+                    type="number" 
+                    value={newTournament.maxTeams} 
+                    onChange={e => setNewTournament({...newTournament, maxTeams: parseInt(e.target.value) || 0})} 
+                  />
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate}>Confirmar en DB</Button>
+              <Button onClick={handleCreate} disabled={!newTournament.name}>Confirmar y Crear</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -168,7 +181,7 @@ export default function ManageTournaments() {
             <CardTitle>Listado en Tiempo Real</CardTitle>
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input placeholder="Buscar por nombre..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </div>
         </CardHeader>
@@ -182,30 +195,42 @@ export default function ManageTournaments() {
                   <TableHead>Torneo</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Equipos</TableHead>
+                  <TableHead>Formato</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(t => (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-bold text-primary">
-                       {t.name}
-                       <div className="text-[10px] text-muted-foreground">{isMounted ? t.startDate.toLocaleDateString() : '...'}</div>
-                    </TableCell>
-                    <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
-                    <TableCell>{t.teams.length} / {t.maxTeams}</TableCell>
-                    <TableCell className="text-right">
-                       <div className="flex justify-end gap-2">
-                         <Button variant="ghost" size="icon" asChild>
-                           <Link href={`/admin/tournaments/${t.id}`}><Settings2 className="h-4 w-4" /></Link>
-                         </Button>
-                         <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setTournamentToDelete(t.id)}>
-                           <Trash className="h-4 w-4" />
-                         </Button>
-                       </div>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                      No se encontraron torneos.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filtered.map(t => (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-bold text-primary">
+                         {t.name}
+                         <div className="text-[10px] text-muted-foreground">{isMounted ? t.startDate.toLocaleDateString() : '...'}</div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
+                      <TableCell>{t.teams.length} / {t.maxTeams}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px]">{t.format}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                         <div className="flex justify-end gap-2">
+                           <Button variant="ghost" size="icon" asChild tooltip="Gestionar">
+                             <Link href={`/admin/tournaments/${t.id}`}><Settings2 className="h-4 w-4" /></Link>
+                           </Button>
+                           <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setTournamentToDelete(t.id)}>
+                             <Trash className="h-4 w-4" />
+                           </Button>
+                         </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           )}
@@ -216,7 +241,7 @@ export default function ManageTournaments() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive flex items-center gap-2"><AlertTriangle /> ¿Borrar de Supabase?</AlertDialogTitle>
-            <AlertDialogDescription>Esta acción eliminará permanentemente todos los equipos, jugadores y partidos asociados a este torneo.</AlertDialogDescription>
+            <AlertDialogDescription>Esta acción eliminará permanentemente todos los equipos, jugadores y partidos asociados a este torneo de forma irreversible.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
