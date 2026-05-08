@@ -1,5 +1,12 @@
 
 import { Tournament, StandingsEntry, Match, Player } from './types';
+import { supabase } from '@/lib/supabase';
+
+/**
+ * Nota: El cliente de Supabase ya está integrado. 
+ * Para migrar a datos reales, puedes usar:
+ * const { data, error } = await supabase.from('tournaments').select('*');
+ */
 
 const createMockPlayers = (teamName: string): Player[] => [
   { id: `p-${teamName}-1`, name: `Delantero ${teamName}`, number: 9, position: 'FW', goals: Math.floor(Math.random() * 10), yellowCards: Math.floor(Math.random() * 3), redCards: Math.floor(Math.random() * 1) },
@@ -93,19 +100,19 @@ export function calculateStandings(tournament: Tournament): StandingsEntry[] {
 
     if (match.homeScore! > match.awayScore!) {
       home.won++;
-      home.points += tournament.pointsPerWin;
+      home.points += (tournament.pointsPerWin ?? 3);
       away.lost++;
-      away.points += tournament.pointsPerLoss;
+      away.points += (tournament.pointsPerLoss ?? 0);
     } else if (match.homeScore! < match.awayScore!) {
       away.won++;
-      away.points += tournament.pointsPerWin;
+      away.points += (tournament.pointsPerWin ?? 3);
       home.lost++;
-      home.points += tournament.pointsPerLoss;
+      home.points += (tournament.pointsPerLoss ?? 0);
     } else {
       home.drawn++;
       away.drawn++;
-      home.points += tournament.pointsPerDraw;
-      away.points += tournament.pointsPerDraw;
+      home.points += (tournament.pointsPerDraw ?? 1);
+      away.points += (tournament.pointsPerDraw ?? 1);
     }
   });
 
