@@ -20,7 +20,8 @@ import {
   UserPlus,
   ChevronRight,
   ClipboardCheck,
-  Search
+  Search,
+  Edit2
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -265,8 +266,21 @@ export default function TournamentManagement() {
                         </div>
                         <div className="flex flex-col items-center gap-1 min-w-[120px]">
                           {match.status === 'Completed' ? (
-                            <div className="text-2xl font-black tracking-widest bg-secondary/30 px-4 py-1 rounded">
-                              {match.homeScore} - {match.awayScore}
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="text-2xl font-black tracking-widest bg-secondary/30 px-4 py-1 rounded">
+                                {match.homeScore} - {match.awayScore}
+                              </div>
+                              <Button 
+                                size="xs" 
+                                variant="ghost" 
+                                className="h-7 text-[10px] gap-1 opacity-60 hover:opacity-100"
+                                onClick={() => {
+                                  setRecordingMatch(match);
+                                  setMatchScore({ home: match.homeScore || 0, away: match.awayScore || 0 });
+                                }}
+                              >
+                                <Edit2 className="h-3 w-3" /> Editar Resultado
+                              </Button>
                             </div>
                           ) : (
                             <Button 
@@ -441,7 +455,7 @@ export default function TournamentManagement() {
                       type="number" 
                       className="h-9 px-2 text-center" 
                       value={player.number} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'number', parseInt(e.target.value))}
+                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'number', parseInt(e.target.value) || 0)}
                     />
                   </div>
                   <div className="col-span-4">
@@ -465,16 +479,16 @@ export default function TournamentManagement() {
                       type="number" 
                       className="h-9" 
                       value={player.goals} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'goals', parseInt(e.target.value))}
+                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'goals', parseInt(e.target.value) || 0)}
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Amanillas</Label>
+                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Amarillas</Label>
                     <Input 
                       type="number" 
                       className="h-9 border-yellow-300" 
                       value={player.yellowCards} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'yellowCards', parseInt(e.target.value))}
+                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'yellowCards', parseInt(e.target.value) || 0)}
                     />
                   </div>
                   <div className="col-span-2">
@@ -483,7 +497,7 @@ export default function TournamentManagement() {
                       type="number" 
                       className="h-9 border-red-300" 
                       value={player.redCards} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'redCards', parseInt(e.target.value))}
+                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'redCards', parseInt(e.target.value) || 0)}
                     />
                   </div>
                   <div className="col-span-1 flex justify-end">
@@ -510,7 +524,7 @@ export default function TournamentManagement() {
               <span className="text-muted-foreground italic">vs</span> 
               {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}
             </DialogTitle>
-            <DialogDescription className="text-center">Registra el marcador final y el desempeño individual.</DialogDescription>
+            <DialogDescription className="text-center">Registra o edita el marcador final y el desempeño individual.</DialogDescription>
           </DialogHeader>
 
           <ScrollArea className="flex-1">
@@ -547,37 +561,37 @@ export default function TournamentManagement() {
                   </h5>
                   <div className="space-y-2">
                     {tournament.teams.find(t => t.id === recordingMatch?.homeTeamId)?.players.map(p => (
-                      <div key={p.id} className="flex items-center gap-2 p-2 border rounded-lg bg-card text-xs">
+                      <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
                         <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
                         <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-2 items-center">
-                          <div className="flex flex-col items-center">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex flex-col items-center gap-1">
                             <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
                             <Input 
                               type="number" 
-                              className="h-8 w-12 px-1 text-center" 
+                              className="h-8 w-11 px-1 text-center" 
                               value={p.goals} 
                               onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
                             />
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8 border-yellow-400 bg-yellow-50 mt-4"
-                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
-                            title="Amarilla"
-                          >
-                            <span className="text-[10px] font-bold">Y</span>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8 border-red-500 bg-red-50 mt-4"
-                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'redCards', p.redCards + 1)}
-                            title="Roja"
-                          >
-                            <span className="text-[10px] font-bold text-red-600">R</span>
-                          </Button>
+                          <div className="flex flex-col items-center gap-1">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Amarillas</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-11 px-1 text-center border-yellow-300" 
+                              value={p.yellowCards} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'yellowCards', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="flex flex-col items-center gap-1">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Rojas</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-11 px-1 text-center border-red-300" 
+                              value={p.redCards} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'redCards', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -591,37 +605,37 @@ export default function TournamentManagement() {
                   </h5>
                   <div className="space-y-2">
                     {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.players.map(p => (
-                      <div key={p.id} className="flex items-center gap-2 p-2 border rounded-lg bg-card text-xs">
+                      <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
                         <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
                         <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-2 items-center">
-                          <div className="flex flex-col items-center">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex flex-col items-center gap-1">
                             <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
                             <Input 
                               type="number" 
-                              className="h-8 w-12 px-1 text-center" 
+                              className="h-8 w-11 px-1 text-center" 
                               value={p.goals} 
                               onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
                             />
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8 border-yellow-400 bg-yellow-50 mt-4"
-                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'yellowCards', p.yellowCards + 1)}
-                            title="Amarilla"
-                          >
-                            <span className="text-[10px] font-bold">Y</span>
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="icon" 
-                            className="h-8 w-8 border-red-500 bg-red-50 mt-4"
-                            onClick={() => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'redCards', p.redCards + 1)}
-                            title="Roja"
-                          >
-                            <span className="text-[10px] font-bold text-red-600">R</span>
-                          </Button>
+                          <div className="flex flex-col items-center gap-1">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Amarillas</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-11 px-1 text-center border-yellow-300" 
+                              value={p.yellowCards} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'yellowCards', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="flex flex-col items-center gap-1">
+                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Rojas</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 w-11 px-1 text-center border-red-300" 
+                              value={p.redCards} 
+                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'redCards', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
