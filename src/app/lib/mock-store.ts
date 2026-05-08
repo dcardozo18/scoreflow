@@ -2,9 +2,9 @@
 import { Tournament, StandingsEntry, Match, Player } from './types';
 
 const createMockPlayers = (teamName: string): Player[] => [
-  { id: `p-${teamName}-1`, name: `Striker ${teamName}`, number: 9, position: 'FW', goals: Math.floor(Math.random() * 10), yellowCards: Math.floor(Math.random() * 3), redCards: Math.floor(Math.random() * 1) },
-  { id: `p-${teamName}-2`, name: `Midfielder ${teamName}`, number: 10, position: 'MF', goals: Math.floor(Math.random() * 5), yellowCards: Math.floor(Math.random() * 4), redCards: 0 },
-  { id: `p-${teamName}-3`, name: `Defender ${teamName}`, number: 4, position: 'DF', goals: Math.floor(Math.random() * 2), yellowCards: Math.floor(Math.random() * 6), redCards: Math.floor(Math.random() * 2) },
+  { id: `p-${teamName}-1`, name: `Delantero ${teamName}`, number: 9, position: 'FW', goals: Math.floor(Math.random() * 10), yellowCards: Math.floor(Math.random() * 3), redCards: Math.floor(Math.random() * 1) },
+  { id: `p-${teamName}-2`, name: `Volante ${teamName}`, number: 10, position: 'MF', goals: Math.floor(Math.random() * 5), yellowCards: Math.floor(Math.random() * 4), redCards: 0 },
+  { id: `p-${teamName}-3`, name: `Defensa ${teamName}`, number: 4, position: 'DF', goals: Math.floor(Math.random() * 2), yellowCards: Math.floor(Math.random() * 6), redCards: Math.floor(Math.random() * 2) },
 ];
 
 export const mockTournaments: Tournament[] = [
@@ -26,10 +26,10 @@ export const mockTournaments: Tournament[] = [
       { id: 'team4', name: 'Defense Towers', logo: 'https://picsum.photos/seed/team4/100/100', players: createMockPlayers('Defense') },
     ],
     matches: [
-      { id: 'm1', tournamentId: 't1', homeTeamId: 'team1', awayTeamId: 'team2', homeScore: 2, awayScore: 1, date: new Date('2024-06-15'), status: 'Completed' },
-      { id: 'm2', tournamentId: 't1', homeTeamId: 'team3', awayTeamId: 'team4', homeScore: 0, awayScore: 0, date: new Date('2024-06-16'), status: 'Completed' },
-      { id: 'm3', tournamentId: 't1', homeTeamId: 'team1', awayTeamId: 'team3', date: new Date('2024-07-20'), status: 'Scheduled' },
-      { id: 'm4', tournamentId: 't1', homeTeamId: 'team2', awayTeamId: 'team4', date: new Date('2024-07-21'), status: 'Scheduled' },
+      { id: 'm1', tournamentId: 't1', homeTeamId: 'team1', awayTeamId: 'team2', homeScore: 2, awayScore: 1, date: new Date('2024-06-15'), status: 'Completed', round: 1 },
+      { id: 'm2', tournamentId: 't1', homeTeamId: 'team3', awayTeamId: 'team4', homeScore: 0, awayScore: 0, date: new Date('2024-06-16'), status: 'Completed', round: 1 },
+      { id: 'm3', tournamentId: 't1', homeTeamId: 'team1', awayTeamId: 'team3', date: new Date('2024-07-20'), status: 'Scheduled', round: 2 },
+      { id: 'm4', tournamentId: 't1', homeTeamId: 'team2', awayTeamId: 'team4', date: new Date('2024-07-21'), status: 'Scheduled', round: 2 },
     ]
   },
   {
@@ -48,7 +48,7 @@ export const mockTournaments: Tournament[] = [
       { id: 'team2', name: 'Lions United', players: createMockPlayers('Lions'), logo: 'https://picsum.photos/seed/team2/100/100' },
     ],
     matches: [
-      { id: 'm-final', tournamentId: 't2', homeTeamId: 'team1', awayTeamId: 'team2', homeScore: 3, awayScore: 2, date: new Date('2023-12-20'), status: 'Completed' },
+      { id: 'm-final', tournamentId: 't2', homeTeamId: 'team1', awayTeamId: 'team2', homeScore: 3, awayScore: 2, date: new Date('2023-12-20'), status: 'Completed', round: 1 },
     ]
   }
 ];

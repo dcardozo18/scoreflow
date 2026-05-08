@@ -28,6 +28,7 @@ export interface Match {
   awayScore?: number;
   date: Date;
   status: 'Scheduled' | 'Completed';
+  round?: number;
 }
 
 export interface SchedulingPreferences {

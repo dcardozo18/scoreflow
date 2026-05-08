@@ -1,6 +1,6 @@
 
 import { Team, Match, SchedulingPreferences } from './types';
-import { addMinutes, setHours, setMinutes, addDays, isBefore, parse, format, getDay } from 'date-fns';
+import { addMinutes, setHours, setMinutes, addDays, isBefore, getDay } from 'date-fns';
 
 export function generateLeagueMatches(
   tournamentId: string,
@@ -11,30 +11,33 @@ export function generateLeagueMatches(
 ): Match[] {
   if (teams.length < 2) return [];
 
-  const matches: { home: string; away: string }[] = [];
   const teamIds = teams.map(t => t.id);
-  
-  // Round Robin Algorithm (Circle Method)
   const tempTeams = [...teamIds];
   if (tempTeams.length % 2 !== 0) tempTeams.push('BYE');
   
-  const rounds = tempTeams.length - 1;
+  const roundsCount = tempTeams.length - 1;
   const half = tempTeams.length / 2;
+  const matchesToSchedule: { home: string; away: string; round: number }[] = [];
 
-  for (let i = 0; i < rounds; i++) {
+  // Round Robin Algorithm (Circle Method)
+  for (let i = 0; i < roundsCount; i++) {
     for (let j = 0; j < half; j++) {
       const home = tempTeams[j];
       const away = tempTeams[tempTeams.length - 1 - j];
       if (home !== 'BYE' && away !== 'BYE') {
-        matches.push({ home, away });
+        matchesToSchedule.push({ home, away, round: i + 1 });
       }
     }
     tempTeams.splice(1, 0, tempTeams.pop()!);
   }
 
   if (isHomeAndAway) {
-    const returnMatches = matches.map(m => ({ home: m.away, away: m.home }));
-    matches.push(...returnMatches);
+    const returnMatches = matchesToSchedule.map(m => ({ 
+      home: m.away, 
+      away: m.home, 
+      round: m.round + roundsCount 
+    }));
+    matchesToSchedule.push(...returnMatches);
   }
 
   // Assign dates based on preferences
@@ -46,7 +49,7 @@ export function generateLeagueMatches(
 
   let currentMatchTime = setMinutes(setHours(currentDate, startH), startM);
 
-  matches.forEach((m, index) => {
+  matchesToSchedule.forEach((m, index) => {
     // Find next valid day
     while (!prefs.allowedDays.includes(getDay(currentMatchTime))) {
       currentMatchTime = addDays(currentMatchTime, 1);
@@ -70,7 +73,8 @@ export function generateLeagueMatches(
       homeTeamId: m.home,
       awayTeamId: m.away,
       date: new Date(currentMatchTime),
-      status: 'Scheduled'
+      status: 'Scheduled',
+      round: m.round
     });
 
     // Increment time for next match
