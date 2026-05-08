@@ -48,7 +48,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/select";
+} from "@/components/ui/select";
 import { mockTournaments } from '@/app/lib/mock-store';
 import Link from 'next/link';
 import { TournamentFormat } from '@/app/lib/types';
