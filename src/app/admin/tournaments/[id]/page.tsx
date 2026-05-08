@@ -142,6 +142,25 @@ export default function TournamentManagement() {
     if (updatedTeam) setEditingTeam(updatedTeam);
   };
 
+  const handleAddTeam = () => {
+    const newTeam: Team = {
+      id: `team-${Date.now()}`,
+      name: `Nuevo Equipo ${tournament.teams.length + 1}`,
+      players: [],
+      logo: `https://picsum.photos/seed/${Date.now()}/100/100`
+    };
+    const updatedTeams = [...tournament.teams, newTeam];
+    setTournament({ ...tournament, teams: updatedTeams });
+    setEditingTeam(newTeam);
+    toast({ title: "Equipo Creado", description: "Se ha añadido un nuevo equipo al torneo." });
+  };
+
+  const handleRemoveTeam = (teamId: string) => {
+    const updatedTeams = tournament.teams.filter(t => t.id !== teamId);
+    setTournament({ ...tournament, teams: updatedTeams });
+    toast({ title: "Equipo Eliminado", description: "El equipo ha sido removido del torneo." });
+  };
+
   const handleGenerateSummary = async () => {
     setAiLoading(true);
     try {
@@ -202,7 +221,7 @@ export default function TournamentManagement() {
       </div>
 
       <Tabs defaultValue="matches" className="space-y-6">
-        <TabsList className="bg-white p-1 border shadow-sm">
+        <TabsList className="bg-white p-1 border shadow-sm h-auto flex-wrap">
           <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configuración</TabsTrigger>
           <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Resultados</TabsTrigger>
           <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Equipos</TabsTrigger>
@@ -346,15 +365,25 @@ export default function TournamentManagement() {
           )}
         </TabsContent>
 
-        {/* ... Rest of components (teams, scheduler, ai) remain same but need to handle rounds logic ... */}
         <TabsContent value="teams" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-bold">Equipos Participantes</h3>
+            <Button onClick={handleAddTeam} className="gap-2 shadow-sm">
+              <Plus className="h-4 w-4" /> Añadir Equipo
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tournament.teams.map(team => (
               <Card key={team.id} className="overflow-hidden group">
                 <CardHeader className="bg-secondary/10 border-b pb-4">
                   <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg text-primary">{team.name}</CardTitle>
-                    <Badge variant="outline">{team.players.length} Jugadores</Badge>
+                    <CardTitle className="text-lg text-primary truncate pr-2">{team.name}</CardTitle>
+                    <div className="flex items-center gap-1 shrink-0">
+                       <Badge variant="outline">{team.players.length} Jgs</Badge>
+                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveTeam(team.id)}>
+                         <Trash2 className="h-4 w-4" />
+                       </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 space-y-4">
@@ -366,7 +395,7 @@ export default function TournamentManagement() {
                     variant="outline"
                     onClick={() => setEditingTeam(team)}
                   >
-                    <Users className="h-4 w-4" /> Gestionar Jugadores
+                    <Edit2 className="h-4 w-4" /> Gestionar Equipo
                   </Button>
                 </CardContent>
               </Card>
@@ -424,18 +453,32 @@ export default function TournamentManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* --- MODAL: Gestionar Jugadores --- */}
+      {/* --- MODAL: Gestionar Equipo y Jugadores --- */}
       <Dialog open={!!editingTeam} onOpenChange={(open) => !open && setEditingTeam(null)}>
-        <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[700px] h-[85vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-secondary/20 border-b">
-            <div className="flex justify-between items-center">
-              <div>
-                <DialogTitle className="text-2xl text-primary font-bold">{editingTeam?.name}</DialogTitle>
-                <DialogDescription>Gestiona los jugadores y estadísticas.</DialogDescription>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <DialogTitle className="text-2xl text-primary font-bold">Configurar Equipo</DialogTitle>
+                <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
+                  <UserPlus className="h-4 w-4" /> Nuevo Jugador
+                </Button>
               </div>
-              <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
-                <UserPlus className="h-4 w-4" /> Nuevo Jugador
-              </Button>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Nombre del Equipo</Label>
+                <Input 
+                  className="text-xl font-bold h-12 border-primary/20"
+                  value={editingTeam?.name || ''} 
+                  onChange={(e) => {
+                    if (!editingTeam) return;
+                    const newName = e.target.value;
+                    const updatedTeams = tournament.teams.map(t => t.id === editingTeam.id ? { ...t, name: newName } : t);
+                    setTournament({ ...tournament, teams: updatedTeams });
+                    setEditingTeam({ ...editingTeam, name: newName });
+                  }}
+                  placeholder="Nombre del club..."
+                />
+              </div>
             </div>
           </DialogHeader>
           
@@ -495,12 +538,35 @@ export default function TournamentManagement() {
                     />
                   </div>
                   <div className="col-span-1 flex justify-end">
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-9 w-9 text-destructive"
+                      onClick={() => {
+                        const updatedTeams = tournament.teams.map(t => 
+                          t.id === editingTeam.id 
+                            ? { ...t, players: t.players.filter(p => p.id !== player.id) }
+                            : t
+                        );
+                        setTournament({...tournament, teams: updatedTeams});
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
+              {editingTeam?.players.length === 0 && (
+                <div className="text-center py-10 border border-dashed rounded-xl bg-secondary/5">
+                   <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-20" />
+                   <p className="text-sm text-muted-foreground">No hay jugadores registrados en este equipo.</p>
+                </div>
+              )}
             </div>
           </ScrollArea>
+          <DialogFooter className="p-4 border-t bg-secondary/5">
+             <Button className="w-full" onClick={() => setEditingTeam(null)}>Guardar y Cerrar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
