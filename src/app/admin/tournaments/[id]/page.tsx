@@ -264,9 +264,13 @@ export default function TournamentManagement() {
           : t
       );
       setTournament({...tournament, teams: updatedTeams});
-      if (editingTeam && editingTeam.id === itemToDelete.id) {
-        setEditingTeam({...editingTeam, players: editingTeam.players.filter(p => p.id !== itemToDelete.extraId)});
+      
+      // MANTENER EL MODAL ABIERTO: Actualizamos el estado del equipo que se está editando
+      const currentUpdatedTeam = updatedTeams.find(t => t.id === itemToDelete.id);
+      if (currentUpdatedTeam) {
+        setEditingTeam(currentUpdatedTeam);
       }
+      
       toast({ title: "Jugador Eliminado", description: "El jugador ha sido removido de la plantilla." });
     }
 
