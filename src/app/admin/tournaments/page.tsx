@@ -2,13 +2,14 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info, AlertTriangle } from 'lucide-react';
+import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { db } from '@/lib/services/db';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -49,123 +50,113 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { mockTournaments } from '@/app/lib/mock-store';
 import Link from 'next/link';
-import { TournamentFormat } from '@/app/lib/types';
+import { TournamentFormat, Tournament } from '@/app/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ManageTournaments() {
   const [isMounted, setIsMounted] = useState(false);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newTournamentFormat, setNewTournamentFormat] = useState<TournamentFormat>('League');
+  const [newTournament, setNewTournament] = useState<Partial<Tournament>>({
+    name: '',
+    format: 'League',
+    maxTeams: 8,
+    isHomeAndAway: false,
+    pointsPerWin: 3,
+    pointsPerDraw: 1,
+    pointsPerLoss: 0,
+    startDate: new Date(),
+    endDate: new Date(),
+    status: 'Upcoming'
+  });
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
   const { toast } = useToast();
   
   useEffect(() => {
     setIsMounted(true);
+    loadTournaments();
   }, []);
 
-  const filtered = mockTournaments.filter(t => 
+  const loadTournaments = async () => {
+    try {
+      setLoading(true);
+      const data = await db.getTournaments();
+      setTournaments(data);
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudieron cargar los torneos de Supabase.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = tournaments.filter(t => 
     t.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleDeleteTournament = () => {
+  const handleCreate = async () => {
+    try {
+      await db.createTournament(newTournament);
+      toast({ title: "Torneo Creado", description: "Persistido en Supabase." });
+      setIsCreateOpen(false);
+      loadTournaments();
+    } catch (error) {
+      toast({ title: "Error", description: "Falló la creación.", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
     if (!tournamentToDelete) return;
-    // Simulate delete
-    toast({
-      title: "Torneo Eliminado",
-      description: "La competición ha sido removida del sistema.",
-      variant: "destructive"
-    });
-    setTournamentToDelete(null);
+    try {
+      await db.deleteTournament(tournamentToDelete);
+      toast({ title: "Torneo Eliminado", variant: "destructive" });
+      setTournamentToDelete(null);
+      loadTournaments();
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo eliminar de Supabase.", variant: "destructive" });
+    }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-headline font-bold text-primary">Torneos</h1>
-          <p className="text-muted-foreground">Administra y configura tus competiciones de fútbol.</p>
+          <h1 className="text-3xl font-headline font-bold text-primary">Gestión de Torneos</h1>
+          <p className="text-muted-foreground">Conectado a Supabase: {tournaments.length} competiciones.</p>
         </div>
         
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="shadow-md">
-              <Plus className="h-4 w-4 mr-2" /> Nuevo Torneo
-            </Button>
+            <Button className="shadow-md"><Plus className="h-4 w-4 mr-2" /> Nuevo Torneo</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] overflow-auto max-h-[90vh]">
+          <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Crear Nuevo Torneo</DialogTitle>
-              <DialogDescription>
-                Configura los parámetros base de tu nueva competición.
-              </DialogDescription>
+              <DialogTitle>Crear Torneo Real</DialogTitle>
+              <DialogDescription>Configura los parámetros para la base de datos.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-6 py-4">
+            <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nombre</Label>
-                  <Input id="name" placeholder="Ej: Copa de Verano" />
+                  <Label>Nombre</Label>
+                  <Input value={newTournament.name} onChange={e => setNewTournament({...newTournament, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="format">Tipo de Torneo</Label>
-                  <Select value={newTournamentFormat} onValueChange={(v: TournamentFormat) => setNewTournamentFormat(v)}>
-                    <SelectTrigger id="format">
-                      <SelectValue placeholder="Formato" />
-                    </SelectTrigger>
+                  <Label>Formato</Label>
+                  <Select value={newTournament.format} onValueChange={(v: TournamentFormat) => setNewTournament({...newTournament, format: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="League">Solo Liga</SelectItem>
+                      <SelectItem value="League">Liga</SelectItem>
                       <SelectItem value="Knockout">Eliminatoria</SelectItem>
-                      <SelectItem value="Groups">Por Grupos</SelectItem>
-                      <SelectItem value="LeagueKnockout">Liga + Eliminatoria (Mixto)</SelectItem>
+                      <SelectItem value="LeagueKnockout">Mixto</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="teams">Cantidad de Equipos</Label>
-                  <Input id="teams" type="number" defaultValue={8} />
-                </div>
-                {newTournamentFormat !== 'LeagueKnockout' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="qualifying">Equipos que clasifican</Label>
-                    <Input id="qualifying" type="number" placeholder="Ej: 4" />
-                  </div>
-                )}
-              </div>
-
-              {newTournamentFormat === 'LeagueKnockout' && (
-                <div className="grid grid-cols-2 gap-4 p-4 border rounded-xl bg-accent/5 border-accent/20 animate-in fade-in slide-in-from-top-2">
-                  <div className="space-y-2">
-                    <Label className="text-accent font-bold">Equipos que clasifican</Label>
-                    <Input type="number" placeholder="Ej: 8" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-accent font-bold">Rondas Eliminatoria</Label>
-                    <Input type="number" placeholder="Ej: 3 (8vos, 4tos...)" />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-secondary/20">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-bold">Torneo de Ida y Vuelta</Label>
-                  <p className="text-xs text-muted-foreground">Se generarán automáticamente dos partidos por cruce.</p>
-                </div>
-                <Switch />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="desc">Descripción Breve</Label>
-                <Input id="desc" placeholder="Resumen del torneo..." />
-              </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
-              <Button type="submit" onClick={() => setIsCreateOpen(false)}>Crear Torneo</Button>
+              <Button onClick={handleCreate}>Confirmar en DB</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -174,118 +165,62 @@ export default function ManageTournaments() {
       <Card>
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle>Listado de Competiciones</CardTitle>
+            <CardTitle>Listado en Tiempo Real</CardTitle>
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por nombre..." 
-                className="pl-10" 
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <Input placeholder="Buscar..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Torneo</TableHead>
-                <TableHead>Formato / Reglas</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Equipos</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(t => (
-                <TableRow key={t.id} className="hover:bg-secondary/10">
-                  <TableCell className="font-bold text-primary">
-                    <div className="flex flex-col">
-                       <div className="flex items-center gap-2">
-                         <Trophy className="h-4 w-4 text-primary/40" />
-                         {t.name}
-                       </div>
-                       <span className="text-[10px] text-muted-foreground font-normal ml-6">
-                         {isMounted ? t.startDate.toLocaleDateString() : '...'}
-                       </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium">{t.format}</span>
-                      <div className="flex gap-2">
-                        {t.isHomeAndAway && <Badge variant="outline" className="text-[9px] h-4">Ida/Vuelta</Badge>}
-                        {t.qualifyingTeamsCount && <Badge variant="outline" className="text-[9px] h-4">Top {t.qualifyingTeamsCount} Clasifica</Badge>}
-                        {t.knockoutRounds && <Badge variant="outline" className="text-[9px] h-4">{t.knockoutRounds} Rondas Finales</Badge>}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={t.status === 'Active' ? 'default' : t.status === 'Completed' ? 'secondary' : 'outline'}>
-                      {t.status === 'Active' ? 'En curso' : t.status === 'Completed' ? 'Finalizado' : 'Próximo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <span className="font-bold">{t.teams.length}</span>
-                      <span className="text-muted-foreground text-xs">/ {t.maxTeams}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" asChild title="Ver sitio público">
-                        <Link href={`/tournament/${t.id}`} target="_blank">
-                          <ExternalLink className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/admin/tournaments/${t.id}`} className="flex items-center">
-                              <Settings2 className="h-4 w-4 mr-2" /> Configurar
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Info className="h-4 w-4 mr-2" /> Ver Estadísticas
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-destructive"
-                            onClick={() => setTournamentToDelete(t.id)}
-                          >
-                            <Trash className="h-4 w-4 mr-2" /> Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
+          {loading ? (
+            <div className="text-center py-10"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Torneo</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Equipos</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(t => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-bold text-primary">
+                       {t.name}
+                       <div className="text-[10px] text-muted-foreground">{isMounted ? t.startDate.toLocaleDateString() : '...'}</div>
+                    </TableCell>
+                    <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
+                    <TableCell>{t.teams.length} / {t.maxTeams}</TableCell>
+                    <TableCell className="text-right">
+                       <div className="flex justify-end gap-2">
+                         <Button variant="ghost" size="icon" asChild>
+                           <Link href={`/admin/tournaments/${t.id}`}><Settings2 className="h-4 w-4" /></Link>
+                         </Button>
+                         <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setTournamentToDelete(t.id)}>
+                           <Trash className="h-4 w-4" />
+                         </Button>
+                       </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
       <AlertDialog open={!!tournamentToDelete} onOpenChange={(open) => !open && setTournamentToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" /> ¿Eliminar este torneo?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción eliminará permanentemente toda la información, equipos, partidos y estadísticas asociadas a este torneo. Esta operación no se puede revertir.
-            </AlertDialogDescription>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2"><AlertTriangle /> ¿Borrar de Supabase?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción eliminará permanentemente todos los equipos, jugadores y partidos asociados a este torneo.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteTournament} className="bg-destructive hover:bg-destructive/90">
-              Confirmar Eliminación
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive">Confirmar Borrado</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

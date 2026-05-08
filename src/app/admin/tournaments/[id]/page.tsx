@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useParams } from 'next/navigation';
@@ -27,7 +28,8 @@ import {
   AlertCircle,
   LayoutGrid
 } from 'lucide-react';
-import { mockTournaments, calculateStandings } from '@/app/lib/mock-store';
+import { calculateStandings } from '@/app/lib/mock-store';
+import { db } from '@/lib/services/db';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,7 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { generateTournamentSummary } from '@/ai/flows/generate-tournament-summary-flow';
-import { TournamentFormat, SchedulingPreferences, Match, Team, Player } from '@/app/lib/types';
+import { TournamentFormat, SchedulingPreferences, Match, Team, Player, Tournament } from '@/app/lib/types';
 import { generateLeagueMatches } from '@/app/lib/scheduler-utils';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -83,10 +85,10 @@ export default function TournamentManagement() {
   const params = useParams();
   const { toast } = useToast();
   const tournamentId = params.id as string;
-  const initialTournament = mockTournaments.find(t => t.id === tournamentId);
   
   const [isMounted, setIsMounted] = useState(false);
-  const [tournament, setTournament] = useState(initialTournament);
+  const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -101,18 +103,32 @@ export default function TournamentManagement() {
   const [newMatchDate, setNewMatchDate] = useState('');
   const [newMatchTime, setNewMatchTime] = useState('');
 
-  const [schedPrefs, setSchedPrefs] = useState<SchedulingPreferences>(
-    tournament?.schedulingPreferences || {
-      allowedDays: [5, 6, 0],
-      startTime: '08:00',
-      endTime: '20:00',
-      matchDurationMinutes: 90
-    }
-  );
+  const [schedPrefs, setSchedPrefs] = useState<SchedulingPreferences>({
+    allowedDays: [5, 6, 0],
+    startTime: '08:00',
+    endTime: '20:00',
+    matchDurationMinutes: 90
+  });
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    loadTournament();
+  }, [tournamentId]);
+
+  const loadTournament = async () => {
+    try {
+      setLoading(true);
+      const data = await db.getTournamentById(tournamentId);
+      if (data) {
+        setTournament(data);
+        if (data.schedulingPreferences) setSchedPrefs(data.schedulingPreferences);
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo cargar el torneo.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const standings = useMemo(() => {
     if (!tournament) return [];
@@ -137,6 +153,7 @@ export default function TournamentManagement() {
       .slice(0, 10);
   }, [allPlayersWithStats]);
 
+  if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto" /></div>;
   if (!tournament) return <div className="p-10 text-center">Torneo no encontrado.</div>;
 
   const groupedMatches = tournament.matches.reduce((acc, match) => {
@@ -148,29 +165,48 @@ export default function TournamentManagement() {
 
   const roundNumbers = Object.keys(groupedMatches).map(Number).sort((a, b) => a - b);
 
-  const handleSaveMatchResult = () => {
-    if (!recordingMatch) return;
-    const updatedMatches = tournament.matches.map(m => 
-      m.id === recordingMatch.id 
-        ? { ...m, status: 'Completed' as const, homeScore: matchScore.home, awayScore: matchScore.away }
-        : m
-    );
-    setTournament({ ...tournament, matches: updatedMatches });
-    setRecordingMatch(null);
-    toast({ title: "Resultado Guardado", description: "El marcador ha sido actualizado exitosamente." });
+  const handleSaveTournamentSettings = async () => {
+    try {
+      await db.updateTournament(tournamentId, tournament);
+      toast({ title: "Cambios guardados", description: "La configuración ha sido actualizada en la base de datos." });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo guardar la configuración.", variant: "destructive" });
+    }
   };
 
-  const handleRescheduleMatch = () => {
+  const handleSaveMatchResult = async () => {
+    if (!recordingMatch) return;
+    try {
+      const updatedMatch = { ...recordingMatch, status: 'Completed' as const, homeScore: matchScore.home, awayScore: matchScore.away };
+      await db.updateMatch(recordingMatch.id, updatedMatch);
+      
+      // Update players stats in DB
+      const homeTeam = tournament.teams.find(t => t.id === recordingMatch.homeTeamId);
+      const awayTeam = tournament.teams.find(t => t.id === recordingMatch.awayTeamId);
+      if (homeTeam) await db.upsertPlayers(homeTeam.players, homeTeam.id);
+      if (awayTeam) await db.upsertPlayers(awayTeam.players, awayTeam.id);
+
+      await loadTournament();
+      setRecordingMatch(null);
+      toast({ title: "Resultado Guardado", description: "Marcador y estadísticas actualizadas exitosamente." });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo guardar el resultado.", variant: "destructive" });
+    }
+  };
+
+  const handleRescheduleMatch = async () => {
     if (!reschedulingMatch || !newMatchDate || !newMatchTime) return;
-    const [year, month, day] = newMatchDate.split('-').map(Number);
-    const [hours, minutes] = newMatchTime.split(':').map(Number);
-    const date = new Date(year, month - 1, day, hours, minutes);
-    const updatedMatches = tournament.matches.map(m => 
-      m.id === reschedulingMatch.id ? { ...m, date } : m
-    );
-    setTournament({ ...tournament, matches: updatedMatches });
-    setReschedulingMatch(null);
-    toast({ title: "Partido Reprogramado", description: "La fecha y hora han sido actualizadas." });
+    try {
+      const [year, month, day] = newMatchDate.split('-').map(Number);
+      const [hours, minutes] = newMatchTime.split(':').map(Number);
+      const date = new Date(year, month - 1, day, hours, minutes);
+      await db.updateMatch(reschedulingMatch.id, { ...reschedulingMatch, date });
+      await loadTournament();
+      setReschedulingMatch(null);
+      toast({ title: "Partido Reprogramado", description: "Fecha y hora actualizadas en la DB." });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo reprogramar el partido.", variant: "destructive" });
+    }
   };
 
   const handleUpdatePlayerStat = (teamId: string, playerId: string, field: keyof Player, value: number) => {
@@ -186,126 +222,88 @@ export default function TournamentManagement() {
     setTournament({ ...tournament, teams: updatedTeams });
   };
 
-  const handleAddPlayer = (teamId: string) => {
-    const newPlayer: Player = {
-      id: `p-${Date.now()}`,
-      name: "Nuevo Jugador",
-      number: 0,
-      position: "N/A",
-      goals: 0,
-      yellowCards: 0,
-      redCards: 0
-    };
-    const updatedTeams = tournament.teams.map(team => 
-      team.id === teamId ? { ...team, players: [...team.players, newPlayer] } : team
-    );
-    setTournament({ ...tournament, teams: updatedTeams });
-    const updatedTeam = updatedTeams.find(t => t.id === teamId);
-    if (updatedTeam) setEditingTeam(updatedTeam);
-  };
-
-  const handleBulkAddPlayers = () => {
-    if (!editingTeam || !bulkText.trim()) return;
-    const lines = bulkText.split('\n');
-    const newPlayers: Player[] = [];
-    lines.forEach((line, index) => {
-      const parts = line.split(',');
-      const name = parts[0]?.trim();
-      if (!name) return;
-      const number = parseInt(parts[1]?.trim()) || 0;
-      const position = parts[2]?.trim() || "N/A";
-      newPlayers.push({
-        id: `p-bulk-${Date.now()}-${index}`,
-        name,
-        number,
-        position,
+  const handleAddPlayer = async (teamId: string) => {
+    try {
+      const newPlayer: Partial<Player> = {
+        name: "Nuevo Jugador",
+        number: 0,
+        position: "N/A",
         goals: 0,
         yellowCards: 0,
         redCards: 0
-      });
-    });
-    const updatedTeams = tournament.teams.map(team => 
-      team.id === editingTeam.id 
-        ? { ...team, players: [...team.players, ...newPlayers] } 
-        : team
-    );
-    setTournament({ ...tournament, teams: updatedTeams });
-    const updatedTeam = updatedTeams.find(t => t.id === editingTeam.id);
-    if (updatedTeam) setEditingTeam(updatedTeam);
-    setBulkText("");
-    setShowBulkAdd(false);
-    toast({ 
-      title: "Carga Completada", 
-      description: `Se han añadido ${newPlayers.length} jugadores al equipo.` 
-    });
-  };
-
-  const handleAddTeam = () => {
-    const newTeam: Team = {
-      id: `team-${Date.now()}`,
-      name: `Nuevo Equipo ${tournament.teams.length + 1}`,
-      players: [],
-      logo: `https://picsum.photos/seed/${Date.now()}/100/100`
-    };
-    const updatedTeams = [...tournament.teams, newTeam];
-    setTournament({ ...tournament, teams: updatedTeams });
-    setEditingTeam(newTeam);
-    toast({ title: "Equipo Creado", description: "Se ha añadido un nuevo equipo al torneo." });
-  };
-
-  const handleConfirmDelete = () => {
-    if (!itemToDelete) return;
-    if (itemToDelete.type === 'match') {
-      const updatedMatches = tournament.matches.filter(m => m.id !== itemToDelete.id);
-      setTournament({ ...tournament, matches: updatedMatches });
-      toast({ title: "Partido Eliminado", description: "El partido ha sido removido del cronograma." });
-    } else if (itemToDelete.type === 'round') {
-      const roundNum = parseInt(itemToDelete.id);
-      const updatedMatches = tournament.matches.filter(m => m.round !== roundNum);
-      setTournament({ ...tournament, matches: updatedMatches });
-      toast({ title: "Fecha Eliminada", description: `Se han eliminado todos los partidos de la Fecha ${roundNum}.` });
-    } else if (itemToDelete.type === 'team') {
-      const updatedTeams = tournament.teams.filter(t => t.id !== itemToDelete.id);
-      setTournament({ ...tournament, teams: updatedTeams });
-      toast({ title: "Equipo Eliminado", description: "El equipo ha sido removido del torneo." });
-    } else if (itemToDelete.type === 'player' && itemToDelete.extraId) {
-      const updatedTeams = tournament.teams.map(t => 
-        t.id === itemToDelete.id 
-          ? { ...t, players: t.players.filter(p => p.id !== itemToDelete.extraId) }
-          : t
-      );
-      setTournament({...tournament, teams: updatedTeams});
-      const currentUpdatedTeam = updatedTeams.find(t => t.id === itemToDelete.id);
-      if (currentUpdatedTeam) setEditingTeam(currentUpdatedTeam);
-      toast({ title: "Jugador Eliminado", description: "El jugador ha sido removido de la plantilla." });
+      };
+      await db.upsertPlayers([newPlayer], teamId);
+      await loadTournament();
+      const updatedTeam = tournament.teams.find(t => t.id === teamId);
+      if (updatedTeam) setEditingTeam(updatedTeam);
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo añadir el jugador.", variant: "destructive" });
     }
-    setItemToDelete(null);
   };
 
-  const handleGenerateSummary = async () => {
-    setAiLoading(true);
+  const handleBulkAddPlayers = async () => {
+    if (!editingTeam || !bulkText.trim()) return;
     try {
-      const result = await generateTournamentSummary({
-        tournamentName: tournament.name,
-        tournamentDescription: tournament.description,
-        teams: tournament.teams.map((t, idx) => ({ name: t.name, rank: idx + 1 })),
-        matchHighlights: tournament.matches.filter(m => m.status === 'Completed').map(m => ({ 
-          matchDescription: `${tournament.teams.find(t => t.id === m.homeTeamId)?.name} vs ${tournament.teams.find(t => t.id === m.awayTeamId)?.name}: ${m.homeScore}-${m.awayScore}` 
-        })),
-        winnerTeam: tournament.teams[0]?.name
-      });
-      setTournament({ ...tournament, aiSummary: result.summary });
-      toast({ title: "Resumen Generado", description: "La IA ha analizado los resultados actuales." });
-    } catch (err) {
-      toast({ title: "Error", description: "No se pudo generar el resumen por IA.", variant: "destructive" });
-    } finally {
-      setAiLoading(false);
+      const lines = bulkText.split('\n');
+      const newPlayers: Partial<Player>[] = lines.map(line => {
+        const parts = line.split(',');
+        return {
+          name: parts[0]?.trim() || "Jugador",
+          number: parseInt(parts[1]?.trim()) || 0,
+          position: parts[2]?.trim() || "N/A"
+        };
+      }).filter(p => p.name);
+
+      await db.upsertPlayers(newPlayers, editingTeam.id);
+      await loadTournament();
+      setEditingTeam(tournament.teams.find(t => t.id === editingTeam.id) || null);
+      setBulkText("");
+      setShowBulkAdd(false);
+      toast({ title: "Carga Completada", description: "Plantilla actualizada en la base de datos." });
+    } catch (error) {
+      toast({ title: "Error", description: "Falló la carga masiva.", variant: "destructive" });
     }
   };
 
-  const handleAutoSchedule = () => {
+  const handleAddTeam = async () => {
+    try {
+      const newTeam = await db.createTeam({ name: `Nuevo Equipo ${tournament.teams.length + 1}`, tournamentId });
+      await loadTournament();
+      setEditingTeam(newTeam);
+      toast({ title: "Equipo Creado", description: "Se ha añadido un nuevo equipo a Supabase." });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo crear el equipo.", variant: "destructive" });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
+    try {
+      if (itemToDelete.type === 'match') {
+        await db.deleteMatch(itemToDelete.id);
+        toast({ title: "Partido Eliminado" });
+      } else if (itemToDelete.type === 'round') {
+        const roundNum = parseInt(itemToDelete.id);
+        const matchesToDelete = tournament.matches.filter(m => m.round === roundNum);
+        await Promise.all(matchesToDelete.map(m => db.deleteMatch(m.id)));
+        toast({ title: "Fecha Eliminada" });
+      } else if (itemToDelete.type === 'team') {
+        await db.deleteTeam(itemToDelete.id);
+        toast({ title: "Equipo Eliminado" });
+      } else if (itemToDelete.type === 'player' && itemToDelete.extraId) {
+        await db.deletePlayer(itemToDelete.extraId);
+        toast({ title: "Jugador Eliminado" });
+      }
+      await loadTournament();
+      setItemToDelete(null);
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo completar la eliminación.", variant: "destructive" });
+    }
+  };
+
+  const handleAutoSchedule = async () => {
     setIsGenerating(true);
-    setTimeout(() => {
+    try {
       const newMatches = generateLeagueMatches(
         tournament.id,
         tournament.teams,
@@ -313,13 +311,14 @@ export default function TournamentManagement() {
         tournament.isHomeAndAway,
         schedPrefs
       );
-      setTournament(prev => prev ? { ...prev, matches: newMatches } : prev);
+      await db.upsertMatches(newMatches, tournamentId);
+      await loadTournament();
+      toast({ title: "Calendario Generado", description: "Partidos guardados en la DB." });
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo generar el calendario.", variant: "destructive" });
+    } finally {
       setIsGenerating(false);
-      toast({
-        title: "Calendario Creado",
-        description: `Se han generado ${newMatches.length} partidos.`,
-      });
-    }, 800);
+    }
   };
 
   return (
@@ -331,12 +330,12 @@ export default function TournamentManagement() {
             <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">
               {tournament.format}
             </span>
-            <p className="text-muted-foreground text-sm">Consola de Administración</p>
+            <p className="text-muted-foreground text-sm">Consola de Administración (Supabase)</p>
           </div>
         </div>
         <div className="flex gap-2">
-           <Button variant="outline">Previsualizar</Button>
-           <Button className="shadow-lg"><Save className="h-4 w-4 mr-2" /> Guardar Todo</Button>
+           <Button variant="outline" asChild><a href={`/tournament/${tournamentId}`} target="_blank">Vista Pública</a></Button>
+           <Button className="shadow-lg" onClick={handleSaveTournamentSettings}><Save className="h-4 w-4 mr-2" /> Guardar Cambios</Button>
         </div>
       </div>
 
@@ -348,7 +347,6 @@ export default function TournamentManagement() {
           <TabsTrigger value="standings" className="gap-2"><LayoutGrid className="h-4 w-4" /> Tabla Posiciones</TabsTrigger>
           <TabsTrigger value="stats" className="gap-2"><BarChart3 className="h-4 w-4" /> Estadísticas</TabsTrigger>
           <TabsTrigger value="scheduler" className="gap-2"><CalendarIcon className="h-4 w-4" /> Programación Auto</TabsTrigger>
-          <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings" className="space-y-6">
@@ -379,12 +377,11 @@ export default function TournamentManagement() {
               </div>
 
               {tournament.format === 'LeagueKnockout' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border rounded-xl bg-accent/5 border-accent/20 animate-in fade-in slide-in-from-top-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border rounded-xl bg-accent/5 border-accent/20 animate-in fade-in">
                   <div className="space-y-2">
                     <Label className="text-accent font-bold">Equipos que clasifican a la eliminatoria</Label>
                     <Input 
                       type="number" 
-                      placeholder="Ej: 4 o 8" 
                       value={tournament.qualifyingTeamsCount || ''}
                       onChange={(e) => setTournament({...tournament, qualifyingTeamsCount: parseInt(e.target.value) || 0})}
                     />
@@ -393,7 +390,6 @@ export default function TournamentManagement() {
                     <Label className="text-accent font-bold">Rondas de eliminatoria</Label>
                     <Input 
                       type="number" 
-                      placeholder="Ej: 2 (Semis y Final)" 
                       value={tournament.knockoutRounds || ''}
                       onChange={(e) => setTournament({...tournament, knockoutRounds: parseInt(e.target.value) || 0})}
                     />
@@ -414,27 +410,15 @@ export default function TournamentManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <Label>Puntos por Victoria</Label>
-                    <Input 
-                      type="number" 
-                      value={tournament.pointsPerWin} 
-                      onChange={(e) => setTournament({...tournament, pointsPerWin: parseInt(e.target.value) || 0})}
-                    />
+                    <Input type="number" value={tournament.pointsPerWin} onChange={(e) => setTournament({...tournament, pointsPerWin: parseInt(e.target.value) || 0})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Puntos por Empate</Label>
-                    <Input 
-                      type="number" 
-                      value={tournament.pointsPerDraw} 
-                      onChange={(e) => setTournament({...tournament, pointsPerDraw: parseInt(e.target.value) || 0})}
-                    />
+                    <Input type="number" value={tournament.pointsPerDraw} onChange={(e) => setTournament({...tournament, pointsPerDraw: parseInt(e.target.value) || 0})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Puntos por Derrota</Label>
-                    <Input 
-                      type="number" 
-                      value={tournament.pointsPerLoss} 
-                      onChange={(e) => setTournament({...tournament, pointsPerLoss: parseInt(e.target.value) || 0})}
-                    />
+                    <Input type="number" value={tournament.pointsPerLoss} onChange={(e) => setTournament({...tournament, pointsPerLoss: parseInt(e.target.value) || 0})} />
                   </div>
                 </div>
               </div>
@@ -445,27 +429,19 @@ export default function TournamentManagement() {
         <TabsContent value="matches" className="space-y-10">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-bold">Cronograma por Fechas</h3>
-            <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-2" /> Añadir Partido Manual</Button>
           </div>
           {roundNumbers.length === 0 ? (
             <div className="text-center py-24 border-2 border-dashed rounded-2xl bg-white">
                <CalendarIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-20" />
                <p className="text-muted-foreground font-medium">No hay partidos en el calendario.</p>
-               <p className="text-sm text-muted-foreground/60">Usa el Generador Automático o añade uno manualmente.</p>
+               <Button variant="link" onClick={() => handleAutoSchedule()}>Generar automáticamente</Button>
             </div>
           ) : (
             roundNumbers.map(roundNum => (
               <div key={roundNum} className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-bold text-primary flex items-center gap-2">
-                    <Badge className="bg-primary px-3 text-sm">Fecha {roundNum}</Badge>
-                  </h4>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-destructive h-7 gap-1 hover:bg-destructive/10"
-                    onClick={() => setItemToDelete({ type: 'round', id: roundNum.toString() })}
-                  >
+                  <Badge className="bg-primary px-3 text-sm">Fecha {roundNum}</Badge>
+                  <Button variant="ghost" size="sm" className="text-destructive gap-1" onClick={() => setItemToDelete({ type: 'round', id: roundNum.toString() })}>
                     <Trash2 className="h-3.5 w-3.5" /> Eliminar Fecha
                   </Button>
                 </div>
@@ -482,32 +458,22 @@ export default function TournamentManagement() {
                               <div className="text-2xl font-black tracking-widest bg-secondary/30 px-4 py-1 rounded">
                                 {match.homeScore} - {match.awayScore}
                               </div>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="h-7 text-[10px] gap-1 opacity-60 hover:opacity-100"
-                                onClick={() => {
-                                  setRecordingMatch(match);
-                                  setMatchScore({ home: match.homeScore || 0, away: match.awayScore || 0 });
-                                }}
-                              >
+                              <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => {
+                                setRecordingMatch(match);
+                                setMatchScore({ home: match.homeScore || 0, away: match.awayScore || 0 });
+                              }}>
                                 <Edit2 className="h-3 w-3" /> Editar Resultado
                               </Button>
                             </div>
                           ) : (
-                            <Button 
-                              size="sm" 
-                              variant="secondary" 
-                              className="w-full gap-2 font-bold"
-                              onClick={() => {
+                            <Button size="sm" variant="secondary" className="w-full gap-2 font-bold" onClick={() => {
                                 setRecordingMatch(match);
                                 setMatchScore({ home: 0, away: 0 });
-                              }}
-                            >
+                              }}>
                               <ClipboardCheck className="h-4 w-4" /> Registrar
                             </Button>
                           )}
-                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
+                          <span className="text-[10px] text-muted-foreground font-bold">
                             {isMounted ? match.date.toLocaleDateString() : '...'} - {isMounted ? match.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
                           </span>
                         </div>
@@ -515,30 +481,17 @@ export default function TournamentManagement() {
                           {tournament.teams.find(t => t.id === match.awayTeamId)?.name}
                         </div>
                         <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8"
-                            onClick={() => {
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                               setReschedulingMatch(match);
                               if (isMounted) {
                                 const d = match.date;
-                                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                                const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-                                setNewMatchDate(dateStr);
-                                setNewMatchTime(timeStr);
+                                setNewMatchDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+                                setNewMatchTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
                               }
-                            }}
-                          >
+                            }}>
                             <Settings className="h-3 w-3" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-destructive h-8 w-8"
-                            onClick={() => setItemToDelete({ type: 'match', id: match.id })}
-                            title="Eliminar partido"
-                          >
+                          <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => setItemToDelete({ type: 'match', id: match.id })}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
@@ -553,35 +506,26 @@ export default function TournamentManagement() {
 
         <TabsContent value="teams" className="space-y-6">
           <div className="flex justify-between items-center">
-            <h3 className="text-xl font-bold">Equipos Participantes</h3>
-            <Button onClick={handleAddTeam} className="gap-2 shadow-sm">
-              <Plus className="h-4 w-4" /> Añadir Equipo
-            </Button>
+            <h3 className="text-xl font-bold">Equipos</h3>
+            <Button onClick={handleAddTeam} className="gap-2"><Plus className="h-4 w-4" /> Añadir Equipo</Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tournament.teams.map(team => (
-              <Card key={team.id} className="overflow-hidden group">
+              <Card key={team.id} className="overflow-hidden">
                 <CardHeader className="bg-secondary/10 border-b pb-4">
                   <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg text-primary truncate pr-2">{team.name}</CardTitle>
-                    <div className="flex items-center gap-1 shrink-0">
-                       <Badge variant="outline">{team.players.length} Jgs</Badge>
+                    <CardTitle className="text-lg text-primary truncate">{team.name}</CardTitle>
+                    <div className="flex gap-1">
+                       <Badge variant="outline">{team.players.length} Jugadores</Badge>
                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setItemToDelete({ type: 'team', id: team.id })}>
                          <Trash2 className="h-4 w-4" />
                        </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-4 space-y-4">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Trophy className="h-3 w-3" /> {team.players.reduce((sum, p) => sum + p.goals, 0)} Goles</span>
-                  </div>
-                  <Button 
-                    className="w-full gap-2" 
-                    variant="outline"
-                    onClick={() => setEditingTeam(team)}
-                  >
-                    <Edit2 className="h-4 w-4" /> Gestionar Equipo
+                <CardContent className="pt-4">
+                  <Button className="w-full gap-2" variant="outline" onClick={() => setEditingTeam(team)}>
+                    <Edit2 className="h-4 w-4" /> Gestionar Plantilla
                   </Button>
                 </CardContent>
               </Card>
@@ -591,34 +535,29 @@ export default function TournamentManagement() {
 
         <TabsContent value="standings" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Tabla de Clasificación</CardTitle>
-              <CardDescription>Resumen de posiciones basado en los puntos configurados ({tournament.pointsPerWin}/{tournament.pointsPerDraw}/{tournament.pointsPerLoss}).</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Tabla de Clasificación Real</CardTitle></CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[50px]">Pos</TableHead>
+                    <TableHead>Pos</TableHead>
                     <TableHead>Equipo</TableHead>
                     <TableHead className="text-center">PJ</TableHead>
                     <TableHead className="text-center">G</TableHead>
                     <TableHead className="text-center">E</TableHead>
                     <TableHead className="text-center">P</TableHead>
-                    <TableHead className="text-center">DG</TableHead>
                     <TableHead className="text-center font-bold">Pts</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {standings.map((entry, idx) => (
                     <TableRow key={entry.teamId}>
-                      <TableCell className="font-medium">{idx + 1}</TableCell>
-                      <TableCell className="font-bold text-primary">{entry.teamName}</TableCell>
+                      <TableCell>{idx + 1}</TableCell>
+                      <TableCell className="font-bold">{entry.teamName}</TableCell>
                       <TableCell className="text-center">{entry.played}</TableCell>
-                      <TableCell className="text-center text-green-600">{entry.won}</TableCell>
-                      <TableCell className="text-center text-muted-foreground">{entry.drawn}</TableCell>
-                      <TableCell className="text-center text-red-600">{entry.lost}</TableCell>
-                      <TableCell className="text-center">{entry.goalsFor - entry.goalsAgainst}</TableCell>
+                      <TableCell className="text-center">{entry.won}</TableCell>
+                      <TableCell className="text-center">{entry.drawn}</TableCell>
+                      <TableCell className="text-center">{entry.lost}</TableCell>
                       <TableCell className="text-center font-bold text-accent">{entry.points}</TableCell>
                     </TableRow>
                   ))}
@@ -631,64 +570,43 @@ export default function TournamentManagement() {
         <TabsContent value="stats" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Award className="h-5 w-5 text-yellow-500" /> Goleadores del Torneo
-                </CardTitle>
-                <CardDescription>Top 10 jugadores con más anotaciones.</CardDescription>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Award className="h-5 w-5 text-yellow-500" /> Goleadores</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Jugador</TableHead>
-                      <TableHead>Equipo</TableHead>
                       <TableHead className="text-right">Goles</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {topScorers.map((p, idx) => (
+                    {topScorers.map((p) => (
                       <TableRow key={p.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground text-[10px] w-4">{idx + 1}.</span>
-                            {p.name}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.teamName}</TableCell>
-                        <TableCell className="text-right font-bold text-primary">{p.goals}</TableCell>
+                        <TableCell>{p.name} <span className="text-xs text-muted-foreground">({p.teamName})</span></TableCell>
+                        <TableCell className="text-right font-bold">{p.goals}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-500" /> Registro Disciplinario
-                </CardTitle>
-                <CardDescription>Jugadores con mayor acumulación de tarjetas.</CardDescription>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><AlertCircle className="h-5 w-5 text-red-500" /> Disciplina</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Jugador</TableHead>
-                      <TableHead className="text-center">Amarillas</TableHead>
-                      <TableHead className="text-center">Rojas</TableHead>
+                      <TableHead className="text-center">A</TableHead>
+                      <TableHead className="text-center">R</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {topCards.map(p => (
                       <TableRow key={p.id}>
-                        <TableCell className="font-medium">
-                          {p.name}
-                          <div className="text-[10px] text-muted-foreground">{p.teamName}</div>
-                        </TableCell>
-                        <TableCell className="text-center font-bold">{p.yellowCards}</TableCell>
-                        <TableCell className="text-center font-bold text-red-600">{p.redCards}</TableCell>
+                        <TableCell>{p.name}</TableCell>
+                        <TableCell className="text-center">{p.yellowCards}</TableCell>
+                        <TableCell className="text-center text-red-600 font-bold">{p.redCards}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -700,323 +618,156 @@ export default function TournamentManagement() {
 
         <TabsContent value="scheduler" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Wand2 className="h-5 w-5 text-accent" /> Generador Inteligente</CardTitle>
-              <CardDescription>Planifica toda la fase automáticamente respetando tus horarios de disponibilidad.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div className="space-y-4">
-                  <Label className="text-primary font-bold">Días de Competencia</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {DAYS.map((day) => (
-                      <div key={day.id} className={`flex items-center space-x-2 border p-3 rounded-lg transition-colors ${schedPrefs.allowedDays.includes(day.id) ? 'bg-primary/5 border-primary/30' : 'bg-white'}`}>
-                        <Checkbox 
-                          id={`day-${day.id}`}
-                          checked={schedPrefs.allowedDays.includes(day.id)} 
-                          onCheckedChange={(c) => setSchedPrefs(p => ({...p, allowedDays: c ? [...p.allowedDays, day.id] : p.allowedDays.filter(d => d !== day.id)}))} 
-                        />
-                        <Label htmlFor={`day-${day.id}`} className="text-xs cursor-pointer">{day.label}</Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  <Label className="text-primary font-bold">Ventana Horaria</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] uppercase text-muted-foreground font-bold">Primer Turno</Label>
-                      <Input type="time" value={schedPrefs.startTime} onChange={(e) => setSchedPrefs(p => ({ ...p, startTime: e.target.value }))} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] uppercase text-muted-foreground font-bold">Cierre Máximo</Label>
-                      <Input type="time" value={schedPrefs.endTime} onChange={(e) => setSchedPrefs(p => ({ ...p, endTime: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Duración + Descanso (min)</Label>
-                    <Input type="number" value={schedPrefs.matchDurationMinutes} onChange={(e) => setSchedPrefs(p => ({ ...p, matchDurationMinutes: parseInt(e.target.value) }))} />
-                  </div>
-                </div>
-              </div>
-              <Button onClick={handleAutoSchedule} className="w-full h-12 text-lg font-bold shadow-lg" disabled={isGenerating}>
+            <CardHeader><CardTitle>Programación Automática</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <Button onClick={handleAutoSchedule} className="w-full h-12 text-lg font-bold" disabled={isGenerating}>
                 {isGenerating ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Wand2 className="h-5 w-5 mr-2" />}
-                Generar Calendario de Partidos
+                Generar y Guardar en Supabase
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* MODALS */}
+      {/* MODALS (Reprogramar, Editar Equipo, Registro de Partido, Confirmaciones) */}
       <Dialog open={!!reschedulingMatch} onOpenChange={(open) => !open && setReschedulingMatch(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Reprogramar Partido</DialogTitle>
-            <DialogDescription>
-              Modifica la fecha y hora del encuentro.
-            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="date" className="text-right flex items-center gap-1">
-                <CalendarIcon className="h-3 w-3" /> Fecha
-              </Label>
-              <Input
-                id="date"
-                type="date"
-                className="col-span-3"
-                value={newMatchDate}
-                onChange={(e) => setNewMatchDate(e.target.value)}
-              />
+              <Label className="text-right">Fecha</Label>
+              <Input type="date" className="col-span-3" value={newMatchDate} onChange={(e) => setNewMatchDate(e.target.value)} />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="time" className="text-right flex items-center gap-1">
-                <Clock className="h-3 w-3" /> Hora
-              </Label>
-              <Input
-                id="time"
-                type="time"
-                className="col-span-3"
-                value={newMatchTime}
-                onChange={(e) => setNewMatchTime(e.target.value)}
-              />
+              <Label className="text-right">Hora</Label>
+              <Input type="time" className="col-span-3" value={newMatchTime} onChange={(e) => setNewMatchTime(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setReschedulingMatch(null)}>Cancelar</Button>
-            <Button onClick={handleRescheduleMatch}>Guardar Cambios</Button>
+            <Button onClick={handleRescheduleMatch}>Actualizar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editingTeam} onOpenChange={(open) => !open && setEditingTeam(null)}>
-        <DialogContent className="sm:max-w-[700px] h-[85vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 bg-secondary/20 border-b">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <DialogTitle className="text-2xl text-primary font-bold">Configurar Equipo</DialogTitle>
-                <div className="flex gap-2">
-                  <Button onClick={() => setShowBulkAdd(true)} variant="outline" size="sm" className="gap-2">
-                    <FileDown className="h-4 w-4" /> Carga Masiva
-                  </Button>
-                  <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
-                    <UserPlus className="h-4 w-4" /> Nuevo Jugador
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase text-muted-foreground">Nombre del Equipo</Label>
-                <Input 
-                  className="text-xl font-bold h-12 border-primary/20"
-                  value={editingTeam?.name || ''} 
-                  onChange={(e) => {
-                    if (!editingTeam) return;
-                    const newName = e.target.value;
-                    const updatedTeams = tournament.teams.map(t => t.id === editingTeam.id ? { ...t, name: newName } : t);
-                    setTournament({ ...tournament, teams: updatedTeams });
-                    setEditingTeam({ ...editingTeam, name: newName });
-                  }}
-                  placeholder="Nombre del club..."
-                />
+        <DialogContent className="sm:max-w-[700px] h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-6 border-b">
+            <div className="flex justify-between items-center mb-4">
+              <DialogTitle>Gestionar {editingTeam?.name}</DialogTitle>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowBulkAdd(true)} variant="outline" size="sm">Carga Masiva</Button>
+                <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} size="sm">Añadir Jugador</Button>
               </div>
             </div>
+            <Input 
+              value={editingTeam?.name || ''} 
+              onChange={(e) => {
+                if (!editingTeam) return;
+                const newName = e.target.value;
+                setEditingTeam({ ...editingTeam, name: newName });
+                db.updateTeam(editingTeam.id, { name: newName });
+              }}
+              placeholder="Nombre del club..."
+            />
           </DialogHeader>
-          
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-4">
               {editingTeam?.players.map((player) => (
-                <div key={player.id} className="grid grid-cols-12 gap-3 items-end p-4 border rounded-xl bg-card hover:bg-secondary/5 transition-colors">
-                  <div className="col-span-1">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Dorsal</Label>
-                    <Input 
-                      type="number" 
-                      className="h-9 px-2 text-center" 
-                      value={player.number} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'number', parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                  <div className="col-span-4">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Nombre</Label>
-                    <Input 
-                      className="h-9" 
-                      value={player.name} 
-                      onChange={(e) => {
-                        const updatedTeams = tournament.teams.map(t => 
-                          t.id === editingTeam.id 
-                            ? { ...t, players: t.players.map(p => p.id === player.id ? { ...p, name: e.target.value } : p) }
-                            : t
-                        );
-                        setTournament({...tournament, teams: updatedTeams});
-                      }}
-                    />
-                  </div>
+                <div key={player.id} className="grid grid-cols-12 gap-3 items-end p-3 border rounded-lg">
                   <div className="col-span-2">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Goles</Label>
-                    <Input 
-                      type="number" 
-                      className="h-9" 
-                      value={player.goals} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'goals', parseInt(e.target.value) || 0)}
-                    />
+                    <Label className="text-[10px]">Dorsal</Label>
+                    <Input type="number" className="h-8" value={player.number} onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'number', parseInt(e.target.value) || 0)} />
                   </div>
-                  <div className="col-span-2">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Amarillas</Label>
-                    <Input 
-                      type="number" 
-                      className="h-9 border-yellow-300" 
-                      value={player.yellowCards} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'yellowCards', parseInt(e.target.value) || 0)}
-                    />
+                  <div className="col-span-6">
+                    <Label className="text-[10px]">Nombre</Label>
+                    <Input className="h-8" value={player.name} onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'name', 0)} />
                   </div>
-                  <div className="col-span-2">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Rojas</Label>
-                    <Input 
-                      type="number" 
-                      className="h-9 border-red-300" 
-                      value={player.redCards} 
-                      onChange={(e) => editingTeam && handleUpdatePlayerStat(editingTeam.id, player.id, 'redCards', parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-9 w-9 text-destructive"
-                      onClick={() => setItemToDelete({ type: 'player', id: editingTeam.id, extraId: player.id })}
-                    >
+                  <div className="col-span-3 flex justify-end">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setItemToDelete({ type: 'player', id: editingTeam.id, extraId: player.id })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
               ))}
-              {editingTeam?.players.length === 0 && (
-                <div className="text-center py-10 border border-dashed rounded-xl bg-secondary/5">
-                   <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-20" />
-                   <p className="text-sm text-muted-foreground">No hay jugadores registrados en este equipo.</p>
-                </div>
-              )}
             </div>
           </ScrollArea>
-          <DialogFooter className="p-4 border-t bg-secondary/5">
-             <Button className="w-full" onClick={() => setEditingTeam(null)}>Guardar y Cerrar</Button>
+          <DialogFooter className="p-4 border-t">
+             <Button className="w-full" onClick={() => {
+               if (editingTeam) {
+                 db.upsertPlayers(editingTeam.players, editingTeam.id).then(() => {
+                   loadTournament();
+                   setEditingTeam(null);
+                 });
+               }
+             }}>Guardar Cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showBulkAdd} onOpenChange={setShowBulkAdd}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Carga Masiva de Plantilla</DialogTitle>
-            <DialogDescription>
-              Pega la lista de jugadores, uno por línea. Formato: Nombre, Dorsal, Posición
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Textarea 
-              placeholder="Lionel Messi, 10, DEL&#10;Luis Suarez, 9, DEL" 
-              className="min-h-[250px] font-mono text-sm"
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowBulkAdd(false)}>Cancelar</Button>
-            <Button onClick={handleBulkAddPlayers} disabled={!bulkText.trim()}>
-              Procesar y Agregar
-            </Button>
-          </DialogFooter>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Carga Masiva</DialogTitle></DialogHeader>
+          <Textarea 
+            placeholder="Nombre, Dorsal, Posición (uno por línea)" 
+            className="min-h-[200px]"
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+          />
+          <DialogFooter><Button onClick={handleBulkAddPlayers}>Procesar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!recordingMatch} onOpenChange={(open) => !open && setRecordingMatch(null)}>
-        <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col p-0">
           <DialogHeader className="p-6 bg-primary/5 border-b">
-            <DialogTitle className="text-xl font-bold flex items-center justify-center gap-4">
-              {tournament.teams.find(t => t.id === recordingMatch?.homeTeamId)?.name} 
-              <span className="text-muted-foreground italic">vs</span> 
-              {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}
-            </DialogTitle>
+            <DialogTitle className="text-center">{tournament.teams.find(t => t.id === recordingMatch?.homeTeamId)?.name} vs {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}</DialogTitle>
           </DialogHeader>
           <ScrollArea className="flex-1">
             <div className="p-8 space-y-8">
-              <div className="flex items-center justify-center gap-12 py-6 bg-secondary/10 rounded-2xl border">
-                 <div className="text-center space-y-3">
-                   <Label className="font-bold text-primary block">LOCAL</Label>
-                   <Input 
-                    type="number" 
-                    className="w-24 h-20 text-center text-4xl font-black rounded-xl border-2" 
-                    value={matchScore.home}
-                    onChange={(e) => setMatchScore({...matchScore, home: parseInt(e.target.value) || 0})}
-                   />
-                 </div>
-                 <div className="text-5xl font-thin text-muted-foreground opacity-30 mt-8">-</div>
-                 <div className="text-center space-y-3">
-                   <Label className="font-bold text-primary block">VISITANTE</Label>
-                   <Input 
-                    type="number" 
-                    className="w-24 h-20 text-center text-4xl font-black rounded-xl border-2" 
-                    value={matchScore.away}
-                    onChange={(e) => setMatchScore({...matchScore, away: parseInt(e.target.value) || 0})}
-                   />
-                 </div>
+              <div className="flex items-center justify-center gap-12">
+                 <Input type="number" className="w-20 h-20 text-center text-3xl font-black" value={matchScore.home} onChange={(e) => setMatchScore({...matchScore, home: parseInt(e.target.value) || 0})} />
+                 <span className="text-4xl">-</span>
+                 <Input type="number" className="w-20 h-20 text-center text-3xl font-black" value={matchScore.away} onChange={(e) => setMatchScore({...matchScore, away: parseInt(e.target.value) || 0})} />
               </div>
               <div className="grid grid-cols-2 gap-8">
-                {['home', 'away'].map(side => (
-                  <div key={side} className="space-y-4">
-                    <h5 className="font-bold text-primary text-sm flex items-center gap-2 border-b pb-2">
-                      <Users className="h-4 w-4" /> {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.name}
-                    </h5>
-                    <div className="space-y-2">
-                      {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.players.map(p => (
-                        <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
-                          <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
-                          <span className="flex-1 font-medium">{p.name}</span>
-                          <div className="flex gap-2 items-end">
+                {['home', 'away'].map(side => {
+                  const teamId = side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId;
+                  const team = tournament.teams.find(t => t.id === teamId);
+                  return (
+                    <div key={side} className="space-y-4">
+                      <h5 className="font-bold border-b pb-2">{team?.name}</h5>
+                      {team?.players.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 p-2 border rounded text-xs">
+                          <span className="w-4 font-bold">{p.number}</span>
+                          <span className="flex-1">{p.name}</span>
+                          <div className="flex gap-1">
                             {['goals', 'yellowCards', 'redCards'].map(stat => (
-                              <div key={stat} className="flex flex-col items-center gap-1">
-                                <Label className="text-[8px] uppercase font-bold text-muted-foreground">{stat === 'goals' ? 'Goles' : stat === 'yellowCards' ? 'Amar' : 'Roj'}</Label>
-                                <Input 
-                                  type="number" 
-                                  className={`h-8 w-11 px-1 text-center ${stat === 'yellowCards' ? 'border-yellow-300' : stat === 'redCards' ? 'border-red-300' : ''}`} 
-                                  value={p[stat as keyof Player] as number} 
-                                  onChange={(e) => recordingMatch && handleUpdatePlayerStat(side === 'home' ? recordingMatch.homeTeamId : recordingMatch.awayTeamId, p.id, stat as keyof Player, parseInt(e.target.value) || 0)}
-                                />
-                              </div>
+                              <Input key={stat} type="number" className="w-9 h-7 px-1 text-center" value={p[stat as keyof Player] as number} onChange={(e) => handleUpdatePlayerStat(teamId!, p.id, stat as keyof Player, parseInt(e.target.value) || 0)} />
                             ))}
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </ScrollArea>
-          <DialogFooter className="p-6 border-t bg-secondary/5 gap-3">
-             <Button variant="ghost" onClick={() => setRecordingMatch(null)}>Cancelar</Button>
-             <Button onClick={handleSaveMatchResult} className="gap-2 px-8 font-bold">
-               <CheckCircle2 className="h-4 w-4" /> Finalizar y Guardar
-             </Button>
-          </DialogFooter>
+          <DialogFooter className="p-6 border-t"><Button onClick={handleSaveMatchResult}>Guardar en la DB</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer y borrará permanentemente el elemento seleccionado.
-            </AlertDialogDescription>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2"><AlertTriangle /> ¿Confirmar?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción es irreversible en Supabase.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive hover:bg-destructive/90">
-              Eliminar Definitivamente
-            </AlertDialogAction>
+            <AlertDialogCancel>No, cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive">Sí, eliminar permanentemente</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
