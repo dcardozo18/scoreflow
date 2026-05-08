@@ -4,6 +4,7 @@ import { Tournament, Team, Player, Match, TournamentFormat, TournamentStatus } f
 
 /**
  * Servicio para gestionar la persistencia de datos en Supabase.
+ * Mapea entre los tipos de TypeScript (camelCase) y la base de datos (snake_case).
  */
 
 export const db = {
@@ -98,7 +99,7 @@ export const db = {
   // --- PLAYERS ---
   async upsertPlayers(players: Partial<Player>[], teamId: string) {
     const playersToInsert = players.map(p => ({
-      id: p.id?.startsWith('p-') ? undefined : p.id, // Generate new if mock
+      id: (p.id && !p.id.startsWith('p-')) ? p.id : undefined,
       team_id: teamId,
       name: p.name,
       number: p.number,
@@ -127,7 +128,7 @@ export const db = {
   // --- MATCHES ---
   async upsertMatches(matches: Partial<Match>[], tournamentId: string) {
     const matchesToInsert = matches.map(m => ({
-      id: m.id?.startsWith('m-') ? undefined : m.id,
+      id: (m.id && !m.id.startsWith('m-')) ? m.id : undefined,
       tournament_id: tournamentId,
       home_team_id: m.homeTeamId,
       away_team_id: m.awayTeamId,
@@ -174,18 +175,18 @@ export const db = {
     return {
       id: dbData.id,
       name: dbData.name,
-      description: dbData.description,
+      description: dbData.description || '',
       format: dbData.format as TournamentFormat,
       status: dbData.status as TournamentStatus,
       startDate: new Date(dbData.start_date),
       endDate: new Date(dbData.end_date),
-      maxTeams: dbData.max_teams,
+      maxTeams: dbData.max_teams || 8,
       qualifyingTeamsCount: dbData.qualifying_teams_count,
       knockoutRounds: dbData.knockout_rounds,
-      isHomeAndAway: dbData.is_home_and_away,
-      pointsPerWin: dbData.points_per_win,
-      pointsPerDraw: dbData.points_per_draw,
-      pointsPerLoss: dbData.points_per_loss,
+      isHomeAndAway: dbData.is_home_and_away || false,
+      pointsPerWin: dbData.points_per_win ?? 3,
+      pointsPerDraw: dbData.points_per_draw ?? 1,
+      pointsPerLoss: dbData.points_per_loss ?? 0,
       aiSummary: dbData.ai_summary,
       teams: (dbData.teams || []).map((t: any) => ({
         id: t.id,
@@ -196,9 +197,9 @@ export const db = {
           name: p.name,
           number: p.number,
           position: p.position,
-          goals: p.goals,
-          yellowCards: p.yellow_cards,
-          redCards: p.red_cards
+          goals: p.goals || 0,
+          yellowCards: p.yellow_cards || 0,
+          redCards: p.red_cards || 0
         }))
       })),
       matches: (dbData.matches || []).map((m: any) => ({
