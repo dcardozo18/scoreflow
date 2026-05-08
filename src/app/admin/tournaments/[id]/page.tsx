@@ -20,7 +20,8 @@ import {
   UserPlus,
   ClipboardCheck,
   Edit2,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -67,7 +68,7 @@ const DAYS = [
 ];
 
 type DeleteState = {
-  type: 'match' | 'team' | 'player';
+  type: 'match' | 'team' | 'player' | 'round';
   id: string;
   extraId?: string; // e.g., player ID if removing from team
 } | null;
@@ -86,8 +87,12 @@ export default function TournamentManagement() {
   // Modals state
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [recordingMatch, setRecordingMatch] = useState<Match | null>(null);
+  const [reschedulingMatch, setReschedulingMatch] = useState<Match | null>(null);
   const [matchScore, setMatchScore] = useState({ home: 0, away: 0 });
   const [itemToDelete, setItemToDelete] = useState<DeleteState>(null);
+  
+  const [newMatchDate, setNewMatchDate] = useState('');
+  const [newMatchTime, setNewMatchTime] = useState('');
 
   const [schedPrefs, setSchedPrefs] = useState<SchedulingPreferences>(
     tournament?.schedulingPreferences || {
@@ -127,6 +132,22 @@ export default function TournamentManagement() {
     setTournament({ ...tournament, matches: updatedMatches });
     setRecordingMatch(null);
     toast({ title: "Resultado Guardado", description: "El marcador ha sido actualizado exitosamente." });
+  };
+
+  const handleRescheduleMatch = () => {
+    if (!reschedulingMatch || !newMatchDate || !newMatchTime) return;
+
+    const [year, month, day] = newMatchDate.split('-').map(Number);
+    const [hours, minutes] = newMatchTime.split(':').map(Number);
+    const date = new Date(year, month - 1, day, hours, minutes);
+
+    const updatedMatches = tournament.matches.map(m => 
+      m.id === reschedulingMatch.id ? { ...m, date } : m
+    );
+
+    setTournament({ ...tournament, matches: updatedMatches });
+    setReschedulingMatch(null);
+    toast({ title: "Partido Reprogramado", description: "La fecha y hora han sido actualizadas." });
   };
 
   const handleUpdatePlayerStat = (teamId: string, playerId: string, field: keyof Player, value: number) => {
@@ -180,6 +201,11 @@ export default function TournamentManagement() {
       const updatedMatches = tournament.matches.filter(m => m.id !== itemToDelete.id);
       setTournament({ ...tournament, matches: updatedMatches });
       toast({ title: "Partido Eliminado", description: "El partido ha sido removido del cronograma." });
+    } else if (itemToDelete.type === 'round') {
+      const roundNum = parseInt(itemToDelete.id);
+      const updatedMatches = tournament.matches.filter(m => m.round !== roundNum);
+      setTournament({ ...tournament, matches: updatedMatches });
+      toast({ title: "Fecha Eliminada", description: `Se han eliminado todos los partidos de la Fecha ${roundNum}.` });
     } else if (itemToDelete.type === 'team') {
       const updatedTeams = tournament.teams.filter(t => t.id !== itemToDelete.id);
       setTournament({ ...tournament, teams: updatedTeams });
@@ -343,9 +369,19 @@ export default function TournamentManagement() {
           ) : (
             roundNumbers.map(roundNum => (
               <div key={roundNum} className="space-y-4">
-                <h4 className="font-bold text-primary flex items-center gap-2">
-                  <Badge className="bg-primary px-3 text-sm">Fecha {roundNum}</Badge>
-                </h4>
+                <div className="flex justify-between items-center">
+                  <h4 className="font-bold text-primary flex items-center gap-2">
+                    <Badge className="bg-primary px-3 text-sm">Fecha {roundNum}</Badge>
+                  </h4>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-destructive h-7 gap-1 hover:bg-destructive/10"
+                    onClick={() => setItemToDelete({ type: 'round', id: roundNum.toString() })}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Eliminar Fecha
+                  </Button>
+                </div>
                 <div className="grid gap-3">
                   {groupedMatches[roundNum].map(match => (
                     <Card key={match.id} className="hover:shadow-md transition-shadow">
@@ -385,14 +421,30 @@ export default function TournamentManagement() {
                             </Button>
                           )}
                           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">
-                            {isMounted ? match.date.toLocaleDateString() : '...'}
+                            {isMounted ? match.date.toLocaleDateString() : '...'} - {isMounted ? match.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
                           </span>
                         </div>
                         <div className="flex-1 text-left font-bold text-lg text-primary truncate">
                           {tournament.teams.find(t => t.id === match.awayTeamId)?.name}
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8"><Settings className="h-3 w-3" /></Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setReschedulingMatch(match);
+                              if (isMounted) {
+                                const d = match.date;
+                                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                                const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                                setNewMatchDate(dateStr);
+                                setNewMatchTime(timeStr);
+                              }
+                            }}
+                          >
+                            <Settings className="h-3 w-3" />
+                          </Button>
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -499,6 +551,48 @@ export default function TournamentManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* --- MODAL: Reprogramar Partido --- */}
+      <Dialog open={!!reschedulingMatch} onOpenChange={(open) => !open && setReschedulingMatch(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Reprogramar Partido</DialogTitle>
+            <DialogDescription>
+              Modifica la fecha y hora del encuentro entre {tournament.teams.find(t => t.id === reschedulingMatch?.homeTeamId)?.name} y {tournament.teams.find(t => t.id === reschedulingMatch?.awayTeamId)?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="date" className="text-right flex items-center gap-1">
+                <CalendarIcon className="h-3 w-3" /> Fecha
+              </Label>
+              <Input
+                id="date"
+                type="date"
+                className="col-span-3"
+                value={newMatchDate}
+                onChange={(e) => setNewMatchDate(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="time" className="text-right flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Hora
+              </Label>
+              <Input
+                id="time"
+                type="time"
+                className="col-span-3"
+                value={newMatchTime}
+                onChange={(e) => setNewMatchTime(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReschedulingMatch(null)}>Cancelar</Button>
+            <Button onClick={handleRescheduleMatch}>Guardar Cambios</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* --- MODAL: Gestionar Equipo y Jugadores --- */}
       <Dialog open={!!editingTeam} onOpenChange={(open) => !open && setEditingTeam(null)}>
@@ -697,6 +791,7 @@ export default function TournamentManagement() {
             <AlertDialogDescription>
               Esta acción no se puede deshacer. Se eliminará permanentemente el {
                 itemToDelete?.type === 'match' ? 'partido seleccionado del cronograma' :
+                itemToDelete?.type === 'round' ? `cronograma completo de la Fecha ${itemToDelete?.id}` :
                 itemToDelete?.type === 'team' ? 'equipo y todos sus datos asociados en este torneo' :
                 'jugador de la plantilla del equipo'
               }.
