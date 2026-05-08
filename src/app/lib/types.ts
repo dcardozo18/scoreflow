@@ -51,6 +51,7 @@ export interface Tournament {
   aiSummary?: string;
   maxTeams: number;
   qualifyingTeamsCount?: number;
+  knockoutRounds?: number;
   isHomeAndAway: boolean;
   schedulingPreferences?: SchedulingPreferences;
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import { useParams } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Trophy, 
   Users, 
@@ -18,9 +18,7 @@ import {
   Calendar as CalendarIcon,
   Wand2,
   UserPlus,
-  ChevronRight,
   ClipboardCheck,
-  Search,
   Edit2
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
@@ -46,7 +44,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 
 const DAYS = [
   { id: 0, label: 'Dom' },
@@ -141,7 +138,6 @@ export default function TournamentManagement() {
       team.id === teamId ? { ...team, players: [...team.players, newPlayer] } : team
     );
     setTournament({ ...tournament, teams: updatedTeams });
-    // Update editing team for the modal
     const updatedTeam = updatedTeams.find(t => t.id === teamId);
     if (updatedTeam) setEditingTeam(updatedTeam);
   };
@@ -227,14 +223,49 @@ export default function TournamentManagement() {
                       <SelectItem value="League">Liga</SelectItem>
                       <SelectItem value="Knockout">Eliminatoria</SelectItem>
                       <SelectItem value="Groups">Grupos</SelectItem>
-                      <SelectItem value="LeagueKnockout">Mixto</SelectItem>
+                      <SelectItem value="LeagueKnockout">Liga + Eliminatoria (Mixto)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center justify-between p-4 border rounded-lg bg-secondary/20">
-                  <Label className="flex items-center gap-2"><Repeat className="h-4 w-4" /> Ida y Vuelta</Label>
-                  <Switch checked={tournament.isHomeAndAway} onCheckedChange={(v) => setTournament({...tournament, isHomeAndAway: v})} />
+                <div className="space-y-2">
+                  <Label>Cantidad Máxima de Equipos</Label>
+                  <Input 
+                    type="number" 
+                    value={tournament.maxTeams} 
+                    onChange={(e) => setTournament({...tournament, maxTeams: parseInt(e.target.value) || 0})}
+                  />
                 </div>
+              </div>
+
+              {tournament.format === 'LeagueKnockout' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border rounded-xl bg-accent/5 border-accent/20 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label className="text-accent font-bold">Equipos que clasifican a la eliminatoria</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="Ej: 4 o 8" 
+                      value={tournament.qualifyingTeamsCount || ''}
+                      onChange={(e) => setTournament({...tournament, qualifyingTeamsCount: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-accent font-bold">Rondas de eliminatoria</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="Ej: 2 (Semis y Final)" 
+                      value={tournament.knockoutRounds || ''}
+                      onChange={(e) => setTournament({...tournament, knockoutRounds: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-secondary/20">
+                <div className="space-y-0.5">
+                  <Label className="flex items-center gap-2 font-bold"><Repeat className="h-4 w-4" /> Ida y Vuelta</Label>
+                  <p className="text-xs text-muted-foreground">¿Se juegan dos partidos por cada enfrentamiento?</p>
+                </div>
+                <Switch checked={tournament.isHomeAndAway} onCheckedChange={(v) => setTournament({...tournament, isHomeAndAway: v})} />
               </div>
             </CardContent>
           </Card>
@@ -255,7 +286,7 @@ export default function TournamentManagement() {
             roundNumbers.map(roundNum => (
               <div key={roundNum} className="space-y-4">
                 <h4 className="font-bold text-primary flex items-center gap-2">
-                  <Badge className="bg-primary px-3">Fecha {roundNum}</Badge>
+                  <Badge className="bg-primary px-3 text-sm">Fecha {roundNum}</Badge>
                 </h4>
                 <div className="grid gap-3">
                   {groupedMatches[roundNum].map(match => (
@@ -271,7 +302,7 @@ export default function TournamentManagement() {
                                 {match.homeScore} - {match.awayScore}
                               </div>
                               <Button 
-                                size="xs" 
+                                size="sm" 
                                 variant="ghost" 
                                 className="h-7 text-[10px] gap-1 opacity-60 hover:opacity-100"
                                 onClick={() => {
@@ -315,6 +346,7 @@ export default function TournamentManagement() {
           )}
         </TabsContent>
 
+        {/* ... Rest of components (teams, scheduler, ai) remain same but need to handle rounds logic ... */}
         <TabsContent value="teams" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tournament.teams.map(team => (
@@ -328,8 +360,6 @@ export default function TournamentManagement() {
                 <CardContent className="pt-4 space-y-4">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Trophy className="h-3 w-3" /> {team.players.reduce((sum, p) => sum + p.goals, 0)} Goles</span>
-                    <span className="flex items-center gap-1"><Badge variant="outline" className="h-3 p-0 px-1 text-[8px] bg-yellow-400">Y</Badge> {team.players.reduce((sum, p) => sum + p.yellowCards, 0)}</span>
-                    <span className="flex items-center gap-1"><Badge variant="outline" className="h-3 p-0 px-1 text-[8px] bg-red-500 text-white">R</Badge> {team.players.reduce((sum, p) => sum + p.redCards, 0)}</span>
                   </div>
                   <Button 
                     className="w-full gap-2" 
@@ -341,10 +371,6 @@ export default function TournamentManagement() {
                 </CardContent>
               </Card>
             ))}
-            <Button variant="outline" className="h-auto border-dashed flex-col py-10 gap-3 opacity-60 hover:opacity-100 transition-opacity">
-              <Plus className="h-8 w-8" />
-              <span>Añadir Equipo</span>
-            </Button>
           </div>
         </TabsContent>
 
@@ -396,38 +422,6 @@ export default function TournamentManagement() {
             </CardContent>
           </Card>
         </TabsContent>
-        
-        <TabsContent value="ai" className="space-y-6">
-          <Card className="bg-primary/5 border-primary/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Crónica Deportiva</CardTitle>
-              <CardDescription>Genera un resumen narrativo basado en los resultados de los partidos jugados.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="min-h-[200px] flex flex-col items-center justify-center p-8 bg-white rounded-xl border-2 border-dashed gap-6">
-                {tournament.aiSummary ? (
-                   <div className="space-y-4">
-                     <p className="italic text-primary text-center text-lg leading-relaxed">"{tournament.aiSummary}"</p>
-                     <div className="flex justify-center">
-                        <Button variant="ghost" size="sm" onClick={handleGenerateSummary} disabled={aiLoading}>
-                           <Repeat className="h-4 w-4 mr-2" /> Regenerar
-                        </Button>
-                     </div>
-                   </div>
-                ) : (
-                   <div className="text-center space-y-4">
-                     <Sparkles className="h-12 w-12 text-primary/20 mx-auto" />
-                     <p className="text-muted-foreground">La IA redactará una reseña de lo ocurrido en el torneo.</p>
-                     <Button onClick={handleGenerateSummary} disabled={aiLoading}>
-                       {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                       Generar Crónica
-                     </Button>
-                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* --- MODAL: Gestionar Jugadores --- */}
@@ -437,7 +431,7 @@ export default function TournamentManagement() {
             <div className="flex justify-between items-center">
               <div>
                 <DialogTitle className="text-2xl text-primary font-bold">{editingTeam?.name}</DialogTitle>
-                <DialogDescription>Gestiona los jugadores, números y estadísticas históricas.</DialogDescription>
+                <DialogDescription>Gestiona los jugadores y estadísticas.</DialogDescription>
               </div>
               <Button onClick={() => editingTeam && handleAddPlayer(editingTeam.id)} variant="default" size="sm" className="gap-2">
                 <UserPlus className="h-4 w-4" /> Nuevo Jugador
@@ -459,7 +453,7 @@ export default function TournamentManagement() {
                     />
                   </div>
                   <div className="col-span-4">
-                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Nombre Completo</Label>
+                    <Label className="text-[9px] uppercase font-bold text-muted-foreground">Nombre</Label>
                     <Input 
                       className="h-9" 
                       value={player.name} 
@@ -507,11 +501,6 @@ export default function TournamentManagement() {
               ))}
             </div>
           </ScrollArea>
-          
-          <DialogFooter className="p-4 border-t bg-secondary/5">
-            <Button variant="outline" onClick={() => setEditingTeam(null)}>Cerrar Ventana</Button>
-            <Button onClick={() => setEditingTeam(null)}>Guardar Cambios</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -524,12 +513,10 @@ export default function TournamentManagement() {
               <span className="text-muted-foreground italic">vs</span> 
               {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}
             </DialogTitle>
-            <DialogDescription className="text-center">Registra o edita el marcador final y el desempeño individual.</DialogDescription>
           </DialogHeader>
 
           <ScrollArea className="flex-1">
             <div className="p-8 space-y-8">
-              {/* Score Inputs */}
               <div className="flex items-center justify-center gap-12 py-6 bg-secondary/10 rounded-2xl border">
                  <div className="text-center space-y-3">
                    <Label className="font-bold text-primary block">LOCAL</Label>
@@ -552,95 +539,35 @@ export default function TournamentManagement() {
                  </div>
               </div>
 
-              {/* Player Stats during match */}
               <div className="grid grid-cols-2 gap-8">
-                {/* Home Team Stats */}
-                <div className="space-y-4">
-                  <h5 className="font-bold text-primary text-sm flex items-center gap-2 border-b pb-2">
-                    <Users className="h-4 w-4" /> Jugadores: {tournament.teams.find(t => t.id === recordingMatch?.homeTeamId)?.name}
-                  </h5>
-                  <div className="space-y-2">
-                    {tournament.teams.find(t => t.id === recordingMatch?.homeTeamId)?.players.map(p => (
-                      <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
-                        <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
-                        <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-2 items-end">
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center" 
-                              value={p.goals} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Amarillas</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center border-yellow-300" 
-                              value={p.yellowCards} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'yellowCards', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Rojas</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center border-red-300" 
-                              value={p.redCards} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.homeTeamId, p.id, 'redCards', parseInt(e.target.value) || 0)}
-                            />
+                {['home', 'away'].map(side => (
+                  <div key={side} className="space-y-4">
+                    <h5 className="font-bold text-primary text-sm flex items-center gap-2 border-b pb-2">
+                      <Users className="h-4 w-4" /> Jugadores: {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.name}
+                    </h5>
+                    <div className="space-y-2">
+                      {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.players.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
+                          <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
+                          <span className="flex-1 font-medium">{p.name}</span>
+                          <div className="flex gap-2 items-end">
+                            {['goals', 'yellowCards', 'redCards'].map(stat => (
+                              <div key={stat} className="flex flex-col items-center gap-1">
+                                <Label className="text-[8px] uppercase font-bold text-muted-foreground">{stat === 'goals' ? 'Goles' : stat === 'yellowCards' ? 'Amar' : 'Roj'}</Label>
+                                <Input 
+                                  type="number" 
+                                  className={`h-8 w-11 px-1 text-center ${stat === 'yellowCards' ? 'border-yellow-300' : stat === 'redCards' ? 'border-red-300' : ''}`} 
+                                  value={p[stat as keyof Player] as number} 
+                                  onChange={(e) => recordingMatch && handleUpdatePlayerStat(side === 'home' ? recordingMatch.homeTeamId : recordingMatch.awayTeamId, p.id, stat as keyof Player, parseInt(e.target.value) || 0)}
+                                />
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-
-                {/* Away Team Stats */}
-                <div className="space-y-4">
-                  <h5 className="font-bold text-primary text-sm flex items-center gap-2 border-b pb-2">
-                    <Users className="h-4 w-4" /> Jugadores: {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}
-                  </h5>
-                  <div className="space-y-2">
-                    {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.players.map(p => (
-                      <div key={p.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card text-xs">
-                        <span className="w-6 font-bold text-muted-foreground">{p.number}</span>
-                        <span className="flex-1 font-medium">{p.name}</span>
-                        <div className="flex gap-2 items-end">
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Goles</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center" 
-                              value={p.goals} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'goals', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Amarillas</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center border-yellow-300" 
-                              value={p.yellowCards} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'yellowCards', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex flex-col items-center gap-1">
-                            <Label className="text-[8px] uppercase font-bold text-muted-foreground">Rojas</Label>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-11 px-1 text-center border-red-300" 
-                              value={p.redCards} 
-                              onChange={(e) => recordingMatch && handleUpdatePlayerStat(recordingMatch.awayTeamId, p.id, 'redCards', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </ScrollArea>

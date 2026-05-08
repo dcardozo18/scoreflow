@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Trophy, MoreVertical, Plus, Edit, Trash, Search, ExternalLink, Settings2, Info } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,11 +41,13 @@ import {
 } from "@/components/ui/select";
 import { mockTournaments } from '@/app/lib/mock-store';
 import Link from 'next/link';
+import { TournamentFormat } from '@/app/lib/types';
 
 export default function ManageTournaments() {
   const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newTournamentFormat, setNewTournamentFormat] = useState<TournamentFormat>('League');
   
   useEffect(() => {
     setIsMounted(true);
@@ -69,7 +71,7 @@ export default function ManageTournaments() {
               <Plus className="h-4 w-4 mr-2" /> Nuevo Torneo
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] overflow-auto max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>Crear Nuevo Torneo</DialogTitle>
               <DialogDescription>
@@ -84,7 +86,7 @@ export default function ManageTournaments() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="format">Tipo de Torneo</Label>
-                  <Select defaultValue="League">
+                  <Select value={newTournamentFormat} onValueChange={(v: TournamentFormat) => setNewTournamentFormat(v)}>
                     <SelectTrigger id="format">
                       <SelectValue placeholder="Formato" />
                     </SelectTrigger>
@@ -92,7 +94,7 @@ export default function ManageTournaments() {
                       <SelectItem value="League">Solo Liga</SelectItem>
                       <SelectItem value="Knockout">Eliminatoria</SelectItem>
                       <SelectItem value="Groups">Por Grupos</SelectItem>
-                      <SelectItem value="LeagueKnockout">Liga + Eliminatoria</SelectItem>
+                      <SelectItem value="LeagueKnockout">Liga + Eliminatoria (Mixto)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -103,15 +105,30 @@ export default function ManageTournaments() {
                   <Label htmlFor="teams">Cantidad de Equipos</Label>
                   <Input id="teams" type="number" defaultValue={8} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="qualifying">Equipos que clasifican</Label>
-                  <Input id="qualifying" type="number" placeholder="Ej: 4" />
-                </div>
+                {newTournamentFormat !== 'LeagueKnockout' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="qualifying">Equipos que clasifican</Label>
+                    <Input id="qualifying" type="number" placeholder="Ej: 4" />
+                  </div>
+                )}
               </div>
+
+              {newTournamentFormat === 'LeagueKnockout' && (
+                <div className="grid grid-cols-2 gap-4 p-4 border rounded-xl bg-accent/5 border-accent/20 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label className="text-accent font-bold">Equipos que clasifican</Label>
+                    <Input type="number" placeholder="Ej: 8" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-accent font-bold">Rondas Eliminatoria</Label>
+                    <Input type="number" placeholder="Ej: 3 (8vos, 4tos...)" />
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between p-4 border rounded-lg bg-secondary/20">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Torneo de Ida y Vuelta</Label>
+                  <Label className="text-base font-bold">Torneo de Ida y Vuelta</Label>
                   <p className="text-xs text-muted-foreground">Se generarán automáticamente dos partidos por cruce.</p>
                 </div>
                 <Switch />
@@ -176,6 +193,7 @@ export default function ManageTournaments() {
                       <div className="flex gap-2">
                         {t.isHomeAndAway && <Badge variant="outline" className="text-[9px] h-4">Ida/Vuelta</Badge>}
                         {t.qualifyingTeamsCount && <Badge variant="outline" className="text-[9px] h-4">Top {t.qualifyingTeamsCount} Clasifica</Badge>}
+                        {t.knockoutRounds && <Badge variant="outline" className="text-[9px] h-4">{t.knockoutRounds} Rondas Finales</Badge>}
                       </div>
                     </div>
                   </TableCell>
