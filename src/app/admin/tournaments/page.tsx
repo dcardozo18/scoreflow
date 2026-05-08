@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info } from 'lucide-react';
+import { Trophy, MoreVertical, Plus, Trash, Search, ExternalLink, Settings2, Info, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,21 +33,34 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/select";
 import { mockTournaments } from '@/app/lib/mock-store';
 import Link from 'next/link';
 import { TournamentFormat } from '@/app/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ManageTournaments() {
   const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTournamentFormat, setNewTournamentFormat] = useState<TournamentFormat>('League');
+  const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
+  const { toast } = useToast();
   
   useEffect(() => {
     setIsMounted(true);
@@ -56,6 +69,17 @@ export default function ManageTournaments() {
   const filtered = mockTournaments.filter(t => 
     t.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDeleteTournament = () => {
+    if (!tournamentToDelete) return;
+    // Simulate delete
+    toast({
+      title: "Torneo Eliminado",
+      description: "La competición ha sido removida del sistema.",
+      variant: "destructive"
+    });
+    setTournamentToDelete(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -230,7 +254,10 @@ export default function ManageTournaments() {
                           <DropdownMenuItem>
                             <Info className="h-4 w-4 mr-2" /> Ver Estadísticas
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => setTournamentToDelete(t.id)}
+                          >
                             <Trash className="h-4 w-4 mr-2" /> Eliminar
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -243,6 +270,25 @@ export default function ManageTournaments() {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!tournamentToDelete} onOpenChange={(open) => !open && setTournamentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> ¿Eliminar este torneo?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente toda la información, equipos, partidos y estadísticas asociadas a este torneo. Esta operación no se puede revertir.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTournament} className="bg-destructive hover:bg-destructive/90">
+              Confirmar Eliminación
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

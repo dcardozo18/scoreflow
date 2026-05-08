@@ -19,7 +19,8 @@ import {
   Wand2,
   UserPlus,
   ClipboardCheck,
-  Edit2
+  Edit2,
+  AlertTriangle
 } from 'lucide-react';
 import { mockTournaments } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -43,6 +44,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const DAYS = [
@@ -54,6 +65,12 @@ const DAYS = [
   { id: 5, label: 'Vie' },
   { id: 6, label: 'Sáb' },
 ];
+
+type DeleteState = {
+  type: 'match' | 'team' | 'player';
+  id: string;
+  extraId?: string; // e.g., player ID if removing from team
+} | null;
 
 export default function TournamentManagement() {
   const params = useParams();
@@ -70,6 +87,7 @@ export default function TournamentManagement() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [recordingMatch, setRecordingMatch] = useState<Match | null>(null);
   const [matchScore, setMatchScore] = useState({ home: 0, away: 0 });
+  const [itemToDelete, setItemToDelete] = useState<DeleteState>(null);
 
   const [schedPrefs, setSchedPrefs] = useState<SchedulingPreferences>(
     tournament?.schedulingPreferences || {
@@ -155,10 +173,31 @@ export default function TournamentManagement() {
     toast({ title: "Equipo Creado", description: "Se ha añadido un nuevo equipo al torneo." });
   };
 
-  const handleRemoveTeam = (teamId: string) => {
-    const updatedTeams = tournament.teams.filter(t => t.id !== teamId);
-    setTournament({ ...tournament, teams: updatedTeams });
-    toast({ title: "Equipo Eliminado", description: "El equipo ha sido removido del torneo." });
+  const handleConfirmDelete = () => {
+    if (!itemToDelete) return;
+
+    if (itemToDelete.type === 'match') {
+      const updatedMatches = tournament.matches.filter(m => m.id !== itemToDelete.id);
+      setTournament({ ...tournament, matches: updatedMatches });
+      toast({ title: "Partido Eliminado", description: "El partido ha sido removido del cronograma." });
+    } else if (itemToDelete.type === 'team') {
+      const updatedTeams = tournament.teams.filter(t => t.id !== itemToDelete.id);
+      setTournament({ ...tournament, teams: updatedTeams });
+      toast({ title: "Equipo Eliminado", description: "El equipo ha sido removido del torneo." });
+    } else if (itemToDelete.type === 'player' && itemToDelete.extraId) {
+      const updatedTeams = tournament.teams.map(t => 
+        t.id === itemToDelete.id 
+          ? { ...t, players: t.players.filter(p => p.id !== itemToDelete.extraId) }
+          : t
+      );
+      setTournament({...tournament, teams: updatedTeams});
+      if (editingTeam && editingTeam.id === itemToDelete.id) {
+        setEditingTeam({...editingTeam, players: editingTeam.players.filter(p => p.id !== itemToDelete.extraId)});
+      }
+      toast({ title: "Jugador Eliminado", description: "El jugador ha sido removido de la plantilla." });
+    }
+
+    setItemToDelete(null);
   };
 
   const handleGenerateSummary = async () => {
@@ -200,16 +239,6 @@ export default function TournamentManagement() {
         description: `Se han generado ${newMatches.length} partidos.`,
       });
     }, 800);
-  };
-
-  const handleDeleteMatch = (matchId: string) => {
-    if (!tournament) return;
-    const updatedMatches = tournament.matches.filter(m => m.id !== matchId);
-    setTournament({ ...tournament, matches: updatedMatches });
-    toast({
-      title: "Partido Eliminado",
-      description: "El partido ha sido removido del cronograma.",
-    });
   };
 
   return (
@@ -368,7 +397,7 @@ export default function TournamentManagement() {
                             variant="ghost" 
                             size="icon" 
                             className="text-destructive h-8 w-8"
-                            onClick={() => handleDeleteMatch(match.id)}
+                            onClick={() => setItemToDelete({ type: 'match', id: match.id })}
                             title="Eliminar partido"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -398,7 +427,7 @@ export default function TournamentManagement() {
                     <CardTitle className="text-lg text-primary truncate pr-2">{team.name}</CardTitle>
                     <div className="flex items-center gap-1 shrink-0">
                        <Badge variant="outline">{team.players.length} Jgs</Badge>
-                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveTeam(team.id)}>
+                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setItemToDelete({ type: 'team', id: team.id })}>
                          <Trash2 className="h-4 w-4" />
                        </Button>
                     </div>
@@ -560,14 +589,7 @@ export default function TournamentManagement() {
                       variant="ghost" 
                       size="icon" 
                       className="h-9 w-9 text-destructive"
-                      onClick={() => {
-                        const updatedTeams = tournament.teams.map(t => 
-                          t.id === editingTeam.id 
-                            ? { ...t, players: t.players.filter(p => p.id !== player.id) }
-                            : t
-                        );
-                        setTournament({...tournament, teams: updatedTeams});
-                      }}
+                      onClick={() => setItemToDelete({ type: 'player', id: editingTeam.id, extraId: player.id })}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -664,6 +686,30 @@ export default function TournamentManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- CONFIRMACIÓN DE ELIMINACIÓN --- */}
+      <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el {
+                itemToDelete?.type === 'match' ? 'partido seleccionado del cronograma' :
+                itemToDelete?.type === 'team' ? 'equipo y todos sus datos asociados en este torneo' :
+                'jugador de la plantilla del equipo'
+              }.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive hover:bg-destructive/90">
+              Eliminar Definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
