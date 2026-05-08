@@ -2,7 +2,7 @@
 "use client";
 
 import { useParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Trophy, 
   Users, 
@@ -22,9 +22,12 @@ import {
   Edit2,
   AlertTriangle,
   Clock,
-  FileDown
+  FileDown,
+  BarChart3,
+  Award,
+  AlertCircle
 } from 'lucide-react';
-import { mockTournaments } from '@/app/lib/mock-store';
+import { mockTournaments, calculateStandings } from '@/app/lib/mock-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,6 +42,7 @@ import { TournamentFormat, SchedulingPreferences, Match, Team, Player } from '@/
 import { generateLeagueMatches } from '@/app/lib/scheduler-utils';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -72,7 +76,7 @@ const DAYS = [
 type DeleteState = {
   type: 'match' | 'team' | 'player' | 'round';
   id: string;
-  extraId?: string; // e.g., player ID if removing from team
+  extraId?: string; 
 } | null;
 
 export default function TournamentManagement() {
@@ -86,7 +90,6 @@ export default function TournamentManagement() {
   const [aiLoading, setAiLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Modals state
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [recordingMatch, setRecordingMatch] = useState<Match | null>(null);
   const [reschedulingMatch, setReschedulingMatch] = useState<Match | null>(null);
@@ -111,6 +114,24 @@ export default function TournamentManagement() {
     setIsMounted(true);
   }, []);
 
+  const allPlayersWithStats = useMemo(() => {
+    if (!tournament) return [];
+    return tournament.teams.flatMap(team => 
+      team.players.map(player => ({ ...player, teamName: team.name }))
+    );
+  }, [tournament]);
+
+  const topScorers = useMemo(() => {
+    return [...allPlayersWithStats].sort((a, b) => b.goals - a.goals).slice(0, 10);
+  }, [allPlayersWithStats]);
+
+  const topCards = useMemo(() => {
+    return [...allPlayersWithStats]
+      .filter(p => p.yellowCards > 0 || p.redCards > 0)
+      .sort((a, b) => (b.redCards * 2 + b.yellowCards) - (a.redCards * 2 + a.yellowCards))
+      .slice(0, 10);
+  }, [allPlayersWithStats]);
+
   if (!tournament) return <div className="p-10 text-center">Torneo no encontrado.</div>;
 
   const groupedMatches = tournament.matches.reduce((acc, match) => {
@@ -122,17 +143,13 @@ export default function TournamentManagement() {
 
   const roundNumbers = Object.keys(groupedMatches).map(Number).sort((a, b) => a - b);
 
-  // --- Handlers ---
-
   const handleSaveMatchResult = () => {
     if (!recordingMatch) return;
-    
     const updatedMatches = tournament.matches.map(m => 
       m.id === recordingMatch.id 
         ? { ...m, status: 'Completed' as const, homeScore: matchScore.home, awayScore: matchScore.away }
         : m
     );
-
     setTournament({ ...tournament, matches: updatedMatches });
     setRecordingMatch(null);
     toast({ title: "Resultado Guardado", description: "El marcador ha sido actualizado exitosamente." });
@@ -140,15 +157,12 @@ export default function TournamentManagement() {
 
   const handleRescheduleMatch = () => {
     if (!reschedulingMatch || !newMatchDate || !newMatchTime) return;
-
     const [year, month, day] = newMatchDate.split('-').map(Number);
     const [hours, minutes] = newMatchTime.split(':').map(Number);
     const date = new Date(year, month - 1, day, hours, minutes);
-
     const updatedMatches = tournament.matches.map(m => 
       m.id === reschedulingMatch.id ? { ...m, date } : m
     );
-
     setTournament({ ...tournament, matches: updatedMatches });
     setReschedulingMatch(null);
     toast({ title: "Partido Reprogramado", description: "La fecha y hora han sido actualizadas." });
@@ -187,18 +201,14 @@ export default function TournamentManagement() {
 
   const handleBulkAddPlayers = () => {
     if (!editingTeam || !bulkText.trim()) return;
-
     const lines = bulkText.split('\n');
     const newPlayers: Player[] = [];
-
     lines.forEach((line, index) => {
       const parts = line.split(',');
       const name = parts[0]?.trim();
       if (!name) return;
-
       const number = parseInt(parts[1]?.trim()) || 0;
       const position = parts[2]?.trim() || "N/A";
-
       newPlayers.push({
         id: `p-bulk-${Date.now()}-${index}`,
         name,
@@ -209,17 +219,14 @@ export default function TournamentManagement() {
         redCards: 0
       });
     });
-
     const updatedTeams = tournament.teams.map(team => 
       team.id === editingTeam.id 
         ? { ...team, players: [...team.players, ...newPlayers] } 
         : team
     );
-
     setTournament({ ...tournament, teams: updatedTeams });
     const updatedTeam = updatedTeams.find(t => t.id === editingTeam.id);
     if (updatedTeam) setEditingTeam(updatedTeam);
-    
     setBulkText("");
     setShowBulkAdd(false);
     toast({ 
@@ -243,7 +250,6 @@ export default function TournamentManagement() {
 
   const handleConfirmDelete = () => {
     if (!itemToDelete) return;
-
     if (itemToDelete.type === 'match') {
       const updatedMatches = tournament.matches.filter(m => m.id !== itemToDelete.id);
       setTournament({ ...tournament, matches: updatedMatches });
@@ -264,16 +270,10 @@ export default function TournamentManagement() {
           : t
       );
       setTournament({...tournament, teams: updatedTeams});
-      
-      // MANTENER EL MODAL ABIERTO: Actualizamos el estado del equipo que se está editando
       const currentUpdatedTeam = updatedTeams.find(t => t.id === itemToDelete.id);
-      if (currentUpdatedTeam) {
-        setEditingTeam(currentUpdatedTeam);
-      }
-      
+      if (currentUpdatedTeam) setEditingTeam(currentUpdatedTeam);
       toast({ title: "Jugador Eliminado", description: "El jugador ha sido removido de la plantilla." });
     }
-
     setItemToDelete(null);
   };
 
@@ -289,7 +289,6 @@ export default function TournamentManagement() {
         })),
         winnerTeam: tournament.teams[0]?.name
       });
-      
       setTournament({ ...tournament, aiSummary: result.summary });
       toast({ title: "Resumen Generado", description: "La IA ha analizado los resultados actuales." });
     } catch (err) {
@@ -341,6 +340,7 @@ export default function TournamentManagement() {
           <TabsTrigger value="settings" className="gap-2"><Settings className="h-4 w-4" /> Configuración</TabsTrigger>
           <TabsTrigger value="matches" className="gap-2"><List className="h-4 w-4" /> Resultados</TabsTrigger>
           <TabsTrigger value="teams" className="gap-2"><Users className="h-4 w-4" /> Equipos</TabsTrigger>
+          <TabsTrigger value="stats" className="gap-2"><BarChart3 className="h-4 w-4" /> Estadísticas</TabsTrigger>
           <TabsTrigger value="scheduler" className="gap-2"><CalendarIcon className="h-4 w-4" /> Programación Auto</TabsTrigger>
           <TabsTrigger value="ai" className="gap-2"><Sparkles className="h-4 w-4" /> IA</TabsTrigger>
         </TabsList>
@@ -401,6 +401,36 @@ export default function TournamentManagement() {
                   <p className="text-xs text-muted-foreground">¿Se juegan dos partidos por cada enfrentamiento?</p>
                 </div>
                 <Switch checked={tournament.isHomeAndAway} onCheckedChange={(v) => setTournament({...tournament, isHomeAndAway: v})} />
+              </div>
+
+              <div className="space-y-4 pt-4 border-t">
+                <Label className="text-lg font-bold">Sistema de Puntuación</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label>Puntos por Victoria</Label>
+                    <Input 
+                      type="number" 
+                      value={tournament.pointsPerWin} 
+                      onChange={(e) => setTournament({...tournament, pointsPerWin: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Puntos por Empate</Label>
+                    <Input 
+                      type="number" 
+                      value={tournament.pointsPerDraw} 
+                      onChange={(e) => setTournament({...tournament, pointsPerDraw: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Puntos por Derrota</Label>
+                    <Input 
+                      type="number" 
+                      value={tournament.pointsPerLoss} 
+                      onChange={(e) => setTournament({...tournament, pointsPerLoss: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -553,6 +583,76 @@ export default function TournamentManagement() {
           </div>
         </TabsContent>
 
+        <TabsContent value="stats" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5 text-yellow-500" /> Goleadores del Torneo
+                </CardTitle>
+                <CardDescription>Top 10 jugadores con más anotaciones.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Jugador</TableHead>
+                      <TableHead>Equipo</TableHead>
+                      <TableHead className="text-right">Goles</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topScorers.map((p, idx) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-[10px] w-4">{idx + 1}.</span>
+                            {p.name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.teamName}</TableCell>
+                        <TableCell className="text-right font-bold text-primary">{p.goals}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-red-500" /> Registro Disciplinario
+                </CardTitle>
+                <CardDescription>Jugadores con mayor acumulación de tarjetas.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Jugador</TableHead>
+                      <TableHead className="text-center">Amarillas</TableHead>
+                      <TableHead className="text-center">Rojas</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topCards.map(p => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">
+                          {p.name}
+                          <div className="text-[10px] text-muted-foreground">{p.teamName}</div>
+                        </TableCell>
+                        <TableCell className="text-center font-bold">{p.yellowCards}</TableCell>
+                        <TableCell className="text-center font-bold text-red-600">{p.redCards}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="scheduler" className="space-y-6">
           <Card>
             <CardHeader>
@@ -603,13 +703,13 @@ export default function TournamentManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* --- MODAL: Reprogramar Partido --- */}
+      {/* MODALS */}
       <Dialog open={!!reschedulingMatch} onOpenChange={(open) => !open && setReschedulingMatch(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Reprogramar Partido</DialogTitle>
             <DialogDescription>
-              Modifica la fecha y hora del encuentro entre {tournament.teams.find(t => t.id === reschedulingMatch?.homeTeamId)?.name} y {tournament.teams.find(t => t.id === reschedulingMatch?.awayTeamId)?.name}.
+              Modifica la fecha y hora del encuentro.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -645,7 +745,6 @@ export default function TournamentManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL: Gestionar Equipo y Jugadores --- */}
       <Dialog open={!!editingTeam} onOpenChange={(open) => !open && setEditingTeam(null)}>
         <DialogContent className="sm:max-w-[700px] h-[85vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-secondary/20 border-b">
@@ -760,19 +859,17 @@ export default function TournamentManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL: Carga Masiva de Jugadores --- */}
       <Dialog open={showBulkAdd} onOpenChange={setShowBulkAdd}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Carga Masiva de Plantilla</DialogTitle>
             <DialogDescription>
               Pega la lista de jugadores, uno por línea. 
-              Formato opcional: <code className="bg-muted px-1 rounded text-xs">Nombre, Número, Posición</code>
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea 
-              placeholder="Ejemplo:&#10;Lionel Messi, 10, DEL&#10;Luis Suarez, 9, DEL&#10;Gerard Pique, 3, DEF" 
+              placeholder="Lionel Messi, 10, DEL&#10;Luis Suarez, 9, DEL" 
               className="min-h-[250px] font-mono text-sm"
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
@@ -787,7 +884,6 @@ export default function TournamentManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL: Registrar Resultado --- */}
       <Dialog open={!!recordingMatch} onOpenChange={(open) => !open && setRecordingMatch(null)}>
         <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-primary/5 border-b">
@@ -797,7 +893,6 @@ export default function TournamentManagement() {
               {tournament.teams.find(t => t.id === recordingMatch?.awayTeamId)?.name}
             </DialogTitle>
           </DialogHeader>
-
           <ScrollArea className="flex-1">
             <div className="p-8 space-y-8">
               <div className="flex items-center justify-center gap-12 py-6 bg-secondary/10 rounded-2xl border">
@@ -821,12 +916,11 @@ export default function TournamentManagement() {
                    />
                  </div>
               </div>
-
               <div className="grid grid-cols-2 gap-8">
                 {['home', 'away'].map(side => (
                   <div key={side} className="space-y-4">
                     <h5 className="font-bold text-primary text-sm flex items-center gap-2 border-b pb-2">
-                      <Users className="h-4 w-4" /> Jugadores: {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.name}
+                      <Users className="h-4 w-4" /> {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.name}
                     </h5>
                     <div className="space-y-2">
                       {tournament.teams.find(t => t.id === (side === 'home' ? recordingMatch?.homeTeamId : recordingMatch?.awayTeamId))?.players.map(p => (
@@ -854,7 +948,6 @@ export default function TournamentManagement() {
               </div>
             </div>
           </ScrollArea>
-
           <DialogFooter className="p-6 border-t bg-secondary/5 gap-3">
              <Button variant="ghost" onClick={() => setRecordingMatch(null)}>Cancelar</Button>
              <Button onClick={handleSaveMatchResult} className="gap-2 px-8 font-bold">
@@ -864,7 +957,6 @@ export default function TournamentManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* --- CONFIRMACIÓN DE ELIMINACIÓN --- */}
       <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -872,12 +964,7 @@ export default function TournamentManagement() {
               <AlertTriangle className="h-5 w-5" /> ¿Confirmar eliminación?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción no se puede deshacer. Se eliminará permanentemente el {
-                itemToDelete?.type === 'match' ? 'partido seleccionado del cronograma' :
-                itemToDelete?.type === 'round' ? `cronograma completo de la Fecha ${itemToDelete?.id}` :
-                itemToDelete?.type === 'team' ? 'equipo y todos sus datos asociados en este torneo' :
-                'jugador de la plantilla del equipo'
-              }.
+              Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

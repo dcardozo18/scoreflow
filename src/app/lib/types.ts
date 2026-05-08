@@ -54,6 +54,10 @@ export interface Tournament {
   knockoutRounds?: number;
   isHomeAndAway: boolean;
   schedulingPreferences?: SchedulingPreferences;
+  // Point system
+  pointsPerWin: number;
+  pointsPerDraw: number;
+  pointsPerLoss: number;
 }
 
 export interface StandingsEntry {
