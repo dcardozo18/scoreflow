@@ -7,6 +7,9 @@ export interface Player {
   name: string;
   number?: number;
   position?: string;
+  goals: number;
+  yellowCards: number;
+  redCards: number;
 }
 
 export interface Team {
